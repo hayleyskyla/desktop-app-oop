@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
 import ph.agritourism.model.Product
 import ph.agritourism.ui.*
 import kotlin.math.roundToInt
@@ -244,10 +245,10 @@ fun FarmersStoriesPage(s: AppState) {
 @Composable
 fun CatalogHome(s: AppState) {
     if (!s.isLoggedIn) {
-        Box(Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(24.dp))) {
+        Box(Modifier.fillMaxWidth().height(340.dp).clip(RoundedCornerShape(24.dp)).testTag("opening-hero")) {
             AsyncImage(s.images.farmLifeBannerPhoto, Modifier.fillMaxSize(), contentDescription = "Philippine farm")
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xE60B2512), Color(0x660B2512)))))
-            Column(Modifier.align(Alignment.CenterStart).padding(32.dp).widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.align(Alignment.CenterStart).padding(48.dp).fillMaxWidth().widthIn(max = 1100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("AgriTourism Philippines", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                 Text("Visit local farms, pick your own fruit and buy fresh harvests", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

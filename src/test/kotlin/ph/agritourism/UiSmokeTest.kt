@@ -387,6 +387,27 @@ class UiSmokeTest {
         assertTrue(s.allProducts.any { it.farmerId == farmId } || s.allTours.any { it.farmerId == farmId })
     }
 
+    @Test fun openingPageUsesTheFullWindowWithoutAnySidebar() = runComposeUiTest {
+        val s = AppState(db, scope)
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+
+        onAllNodesWithTag("sidebar").assertCountEquals(0)
+        onAllNodesWithText("Dashboard").assertCountEquals(0)
+        onAllNodesWithText("Full View Desktop").assertCountEquals(0)
+        onAllNodesWithContentDescription("Toggle sidebar").assertCountEquals(0)
+
+        val root = onNodeWithTag("app-root").fetchSemanticsNode().boundsInRoot
+        val content = onNodeWithTag("page-content").fetchSemanticsNode().boundsInRoot
+        val hero = onNodeWithTag("opening-hero").fetchSemanticsNode().boundsInRoot
+        assertTrue(kotlin.math.abs(content.width - root.width) < 2f, "content must fill window width: $content / $root")
+        assertTrue(hero.width > content.width * 0.8f, "hero must use the full-width landing area: $hero / $content")
+        assertTrue(hero.height > content.height * 0.3f, "hero must use more vertical space: $hero / $content")
+
+        onNodeWithText("Explore More").performClick()
+        assertEquals(Page.LOGIN, s.activePage)
+    }
+
     @Test fun openingPageUsesExploreMoreAndGoesDirectlyToLogin() = runComposeUiTest {
         val s = AppState(db, scope)
         mainClock.autoAdvance = false

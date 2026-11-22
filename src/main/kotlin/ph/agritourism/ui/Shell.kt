@@ -41,16 +41,19 @@ import ph.agritourism.ui.screens.*
 
 @Composable
 fun AppShell(s: AppState) {
-    Box(Modifier.fillMaxSize().background(Palette.Cream)) {
+    // The opening page is a full-window landing route: no sidebar container, no empty nav gutter,
+    // and no extra label. Logged-in dashboards keep their normal navigation shell.
+    val isOpeningPage = !s.isLoggedIn && s.activePage == Page.HOME
+    Box(Modifier.fillMaxSize().background(Palette.Cream).testTag("app-root")) {
         // Scenic farm wallpaper with frosted cream layer
         AsyncImage(s.images.globalFarmBackground, Modifier.fillMaxSize().blur(18.dp))
         Box(Modifier.fillMaxSize().background(Color(0xD9F8F6F0)))
 
         Column(Modifier.fillMaxSize()) {
-            TopBar(s)
+            TopBar(s, isOpeningPage)
             Row(Modifier.fillMaxSize()) {
-                Sidebar(s)
-                Box(Modifier.weight(1f).fillMaxHeight()) { PageContent(s) }
+                if (!isOpeningPage) Sidebar(s)
+                Box(Modifier.weight(1f).fillMaxHeight().testTag("page-content")) { PageContent(s) }
             }
         }
         Overlays(s)
@@ -59,13 +62,15 @@ fun AppShell(s: AppState) {
 }
 
 @Composable
-private fun TopBar(s: AppState) {
+private fun TopBar(s: AppState, isOpeningPage: Boolean = false) {
     Row(Modifier.fillMaxWidth().height(60.dp).shadow(3.dp, ambientColor = Color(0x14000000), spotColor = Color(0x14000000)).background(Color.White.copy(alpha = 0.97f)).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        IconButton({ s.isSidebarCollapsed = !s.isSidebarCollapsed }, Modifier.handCursor().size(36.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Palette.Border, RoundedCornerShape(10.dp))) {
-            Icon(if (s.isSidebarCollapsed) Icons.AutoMirrored.Outlined.ViewSidebar else Icons.AutoMirrored.Outlined.MenuOpen, "Toggle sidebar", tint = Palette.Ink)
+        if (!isOpeningPage) {
+            IconButton({ s.isSidebarCollapsed = !s.isSidebarCollapsed }, Modifier.handCursor().size(36.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, Palette.Border, RoundedCornerShape(10.dp))) {
+                Icon(if (s.isSidebarCollapsed) Icons.AutoMirrored.Outlined.ViewSidebar else Icons.AutoMirrored.Outlined.MenuOpen, "Toggle sidebar", tint = Palette.Ink)
+            }
+            Spacer(Modifier.width(12.dp))
         }
-        Spacer(Modifier.width(12.dp))
         Row(Modifier.clip(RoundedCornerShape(10.dp)).handCursor().clickable { s.navigate(if (s.isLoggedIn) Page.DASHBOARD else Page.HOME) }.padding(4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             AsyncImage("res:icons/pwa-192x192.png", Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)))
@@ -160,7 +165,7 @@ private fun Sidebar(s: AppState) {
     val expanded = !s.isSidebarCollapsed || hovered
     val width by androidx.compose.animation.core.animateDpAsState(if (expanded) 264.dp else 76.dp,
         androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow), label = "sidebar-w")
-    Column(Modifier.width(width).fillMaxHeight().background(Color.White.copy(alpha = 0.94f)).clipToBounds()
+    Column(Modifier.width(width).fillMaxHeight().background(Color.White.copy(alpha = 0.94f)).clipToBounds().testTag("sidebar")
         .onPointerEvent(PointerEventType.Enter) { if (s.isSidebarCollapsed) hovered = true }
         .onPointerEvent(PointerEventType.Exit) { hovered = false }) {
         Row(Modifier.fillMaxWidth().clickable { if (s.isSidebarCollapsed) s.isSidebarCollapsed = false else s.navigate(Page.DASHBOARD) }.padding(16.dp),
