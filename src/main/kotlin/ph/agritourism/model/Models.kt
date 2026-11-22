@@ -1,9 +1,14 @@
 package ph.agritourism.model
 
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.util.Locale
 
 enum class Role(val key: String, val displayName: String, val subtitle: String, val email: String) {
-    ADMIN("admin", "Administrator", "Platform Manager", "admin@agritourism.ph"),
+    ADMIN("admin", "Administrator", "Platform Manager", ""),
     USER("user", "Maria Santos", "Eco Tourist", "maria.santos@gmail.com"),
     FARMER("farmer", "Juan Dela Cruz", "Accredited Farmer", "juan.delacruz@sunnyvalefarm.ph");
 
@@ -11,6 +16,9 @@ enum class Role(val key: String, val displayName: String, val subtitle: String, 
         fun of(key: String) = entries.firstOrNull { it.key == key } ?: USER
     }
 }
+
+const val COD_PAYMENT_METHOD = "Cash on Delivery"
+const val PAY_AT_FARM_PAYMENT_METHOD = "Pay at the Farm"
 
 /** Parses ISO (2026-11-20) or display (Nov 20, 2026) dates. */
 fun parseDate(d: String): java.time.LocalDate? {
@@ -21,6 +29,81 @@ fun parseDate(d: String): java.time.LocalDate? {
 
 /** Start time of a slot label, e.g. "08:00 AM - Morning Agro-Walk" -> "08:00 AM". */
 fun slotTime(t: String): String = t.substringBefore(" - ").trim().uppercase()
+
+private val SLOT_TIME_FORMATTER = DateTimeFormatterBuilder().parseCaseInsensitive()
+    .appendPattern("h:mm a").toFormatter(Locale.ENGLISH)
+
+fun parseSlotStart(label: String): LocalTime? =
+    runCatching { LocalTime.parse(label.trim().substringBefore(" - "), SLOT_TIME_FORMATTER) }.getOrNull()
+
+/** Parses a plain clock time such as "08:00 AM", "8:00 am", or "17:00". */
+fun parseClockTime(text: String): LocalTime? {
+    val t = text.trim()
+    return runCatching { LocalTime.parse(t.uppercase(Locale.ENGLISH), SLOT_TIME_FORMATTER) }.getOrNull()
+        ?: runCatching { LocalTime.parse(t, DateTimeFormatter.ofPattern("H:mm")) }.getOrNull()
+}
+
+/** Formats a time as a 12-hour clock label such as "08:00 AM". */
+fun formatClockTime(time: LocalTime): String =
+    time.format(DateTimeFormatter.ofPattern("hh:mm a", Locale.ENGLISH))
+
+private fun parseOperatingHours(hours: String): Pair<LocalTime, LocalTime>? {
+    val parts = hours.trim().split(Regex("\\s+(?:-|–|to)\\s+", RegexOption.IGNORE_CASE), limit = 2)
+    if (parts.size != 2) return null
+    val open = runCatching { LocalTime.parse(parts[0], SLOT_TIME_FORMATTER) }.getOrNull() ?: return null
+    val close = runCatching { LocalTime.parse(parts[1], SLOT_TIME_FORMATTER) }.getOrNull() ?: return null
+    return (open to close).takeIf { open.isBefore(close) }
+}
+
+fun parseDurationMinutes(duration: String): Long? {
+    val parts = Regex("(\\d+)\\s*(hours?|hrs?|h|minutes?|mins?|m)", RegexOption.IGNORE_CASE)
+        .findAll(duration)
+        .toList()
+    if (parts.isEmpty()) return null
+    val minutes = parts.sumOf { match ->
+        val amount = match.groupValues[1].toLongOrNull() ?: return null
+        if (match.groupValues[2].startsWith("h", true)) amount * 60 else amount
+    }
+    return minutes.takeIf { it > 0 }
+}
+
+const val NO_BOOKING_SCHEDULE_MESSAGE = "This farm has no available tour schedule. Please contact the farm before booking."
+const val OUTSIDE_BOOKING_SCHEDULE_MESSAGE = "The selected time is outside the farm's available tour schedule."
+
+/**
+ * Time-slot labels contain a start time and a descriptive title. The next configured slot (or
+ * closing time) bounds a tour slot; fruit-picking duration is stored separately and must fit
+ * before both that boundary and closing time.
+ */
+fun bookingScheduleError(
+    activityType: String,
+    activityId: Int,
+    selectedLabel: String,
+    operatingHours: String?,
+    duration: String?,
+    slots: List<TimeSlot>,
+): String? {
+    val hours = operatingHours?.let(::parseOperatingHours) ?: return NO_BOOKING_SCHEDULE_MESSAGE
+    val activitySlots = slots.filter { it.activityType == activityType && it.activityId == activityId }
+    if (activitySlots.isEmpty()) return NO_BOOKING_SCHEDULE_MESSAGE
+    val start = parseSlotStart(selectedLabel) ?: return OUTSIDE_BOOKING_SCHEDULE_MESSAGE
+    if (activitySlots.none { parseSlotStart(it.label) == start }) return OUTSIDE_BOOKING_SCHEDULE_MESSAGE
+    if (start.isBefore(hours.first) || !start.isBefore(hours.second)) return OUTSIDE_BOOKING_SCHEDULE_MESSAGE
+
+    val nextStart = activitySlots.mapNotNull { parseSlotStart(it.label) }
+        .filter { it.isAfter(start) && it.isBefore(hours.second) }
+        .minOrNull()
+    val slotEnd = nextStart?.let { minOf(it, hours.second) } ?: hours.second
+    val availableMinutes = java.time.Duration.between(start, slotEnd).toMinutes()
+    if (availableMinutes <= 0) return OUTSIDE_BOOKING_SCHEDULE_MESSAGE
+
+    if (activityType == "orchard") {
+        val durationMinutes = duration?.let(::parseDurationMinutes)
+            ?: return "This fruit-picking experience has no valid duration and cannot be booked."
+        if (durationMinutes > availableMinutes) return OUTSIDE_BOOKING_SCHEDULE_MESSAGE
+    }
+    return null
+}
 
 /**
  * Identifies "the same person at the same date and time". A customer may hold only one active
@@ -35,7 +118,23 @@ fun Booking.slotKey(): String {
 /** [farmerId] links a farmer account to its farm in the farmers table. */
 data class User(val id: Long, val fullName: String, val email: String, val phone: String, val role: Role, val farmerId: Int? = null, val address: String = "",
                 /** Profile photo chosen by the user (blank = role default). */
-                val avatarUrl: String = "")
+                val avatarUrl: String = "",
+                val isActive: Boolean = true,
+                val createdAt: String = "")
+
+@Serializable
+enum class TourPriceStatus(val label: String) {
+    VERIFIED("Published rate"),
+    ESTIMATED("Estimated rate"),
+    UNVERIFIED("Unverified rate"),
+}
+
+@Serializable
+enum class TourPriceType(val label: String) {
+    PER_PERSON("per person"),
+    PER_GROUP("per group"),
+    PER_PACKAGE("per package"),
+}
 
 @Serializable
 data class FarmTour(
@@ -57,7 +156,23 @@ data class FarmTour(
     val farmerId: Int? = null,
     /** Deleted by its owner: hidden from the catalog but kept so old bookings still resolve. */
     val archived: Boolean = false,
+    val estimatedDuration: String = "",
+    /** Retained for old databases; pricing status now describes evidence, not booking approval. */
+    val priceApproved: Boolean = true,
+    val suggestedPricePerPerson: Int? = null,
+    val priceSuggestionBasis: String = "",
+    val priceSuggestionSource: String = "",
+    val priceStatus: TourPriceStatus = TourPriceStatus.UNVERIFIED,
+    val priceType: TourPriceType = TourPriceType.PER_PERSON,
+    val bookingEnabled: Boolean = true,
+    val experienceType: String = "tour",
 )
+
+fun FarmTour.bookingTotal(participants: Int): Int =
+    when (priceType) {
+        TourPriceType.PER_PERSON -> pricePerPerson * participants
+        TourPriceType.PER_GROUP, TourPriceType.PER_PACKAGE -> pricePerPerson
+    }
 
 @Serializable
 data class FruitPickingItem(
@@ -128,6 +243,15 @@ data class Booking(
     val activityType: String = "tour",
 )
 
+data class BookingDateWindow(val first: LocalDate, val last: LocalDate) {
+    fun contains(date: LocalDate) = !date.isBefore(first) && !date.isAfter(last)
+
+    companion object {
+        fun current(today: LocalDate = LocalDate.now()) =
+            BookingDateWindow(today, LocalDate.of(today.year + 1, 12, 31))
+    }
+}
+
 @Serializable
 data class DeliveryCheckpoint(
     val title: String,
@@ -138,7 +262,14 @@ data class DeliveryCheckpoint(
 )
 
 @Serializable
-data class OrderItem(val productName: String, val qty: Int, val unitPrice: Double, val productId: Long? = null)
+data class OrderItem(
+    val productName: String,
+    val qty: Int,
+    val unitPrice: Double,
+    val productId: Long? = null,
+    val productImageUrl: String = "",
+    val sellerName: String = "",
+)
 
 @Serializable
 data class FarmerOrder(
@@ -224,6 +355,8 @@ data class AppNotification(
     val bookingId: Long? = null,
     val attendanceStatus: String? = null,
     val recipientEmail: String? = null,
+    val orderId: String? = null,
+    val eventKey: String? = null,
 )
 
 data class ReceiptItem(val name: String, val quantity: Int, val unitPrice: Double, val total: Double)
@@ -253,7 +386,6 @@ data class AppImages(
     val mariaAvatar: String,
     val juanAvatar: String,
     val adminAvatar: String,
-    val gcashQrMockup: String,
     val receiptSamplePhoto: String,
     val defaultProductFallbackImage: String,
     val farmerProfileBanner: String,

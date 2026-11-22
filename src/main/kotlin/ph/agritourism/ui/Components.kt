@@ -19,6 +19,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -196,8 +197,12 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, icon: ImageVector
     Button(onClick, modifier.graphicsLayer { scaleX = scale; scaleY = scale }.handCursor(enabled), enabled = enabled, shape = RoundedCornerShape(12.dp),
         interactionSource = interaction,
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, hoveredElevation = 6.dp, pressedElevation = 0.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
-        if (icon != null) { Icon(icon, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)) }
+        colors = ButtonDefaults.buttonColors(containerColor = color),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)) {
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+        }
         Text(text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
     }
 }
@@ -212,9 +217,24 @@ fun SecondaryButton(text: String, modifier: Modifier = Modifier, icon: ImageVect
         interactionSource = interaction,
         border = BorderStroke(1.dp, color.copy(alpha = 0.35f)), colors = ButtonDefaults.outlinedButtonColors(contentColor = color, containerColor = bg),
         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
-        if (icon != null) { Icon(icon, null, Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)) }
+        if (icon != null) {
+            Icon(icon, null, Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+        }
         Text(text, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
+}
+
+/** Minimal text-only action used for Back / Close / Exit so no boxed control is rendered. */
+@Composable
+fun TextAction(text: String, modifier: Modifier = Modifier, color: Color = Palette.Forest, onClick: () -> Unit) {
+    Text(
+        text,
+        modifier = modifier.handCursor().clickable(onClick = onClick).padding(vertical = 4.dp),
+        color = color,
+        fontWeight = FontWeight.Bold,
+        fontSize = 13.sp,
+    )
 }
 
 @Composable
@@ -244,10 +264,9 @@ fun FilterChipRow(options: List<String>, selected: String, label: (String) -> St
 }
 
 fun statusColors(status: String): Pair<Color, Color> = when (status) {
-    "Confirmed", "Delivered", "Completed" -> Color(0xFFDCFCE7) to Color(0xFF166534)
-    "Pending", "Pending Packing" -> Color(0xFFFEF3C7) to Color(0xFF92400E)
+    "Confirmed", "Completed" -> Color(0xFFDCFCE7) to Color(0xFF166534)
+    "Pending" -> Color(0xFFFEF3C7) to Color(0xFF92400E)
     "Cancelled" -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
-    "Dispatched", "Packed", "Out for Delivery" -> Color(0xFFDBEAFE) to Color(0xFF1E40AF)
     else -> Palette.Mint to Palette.Deep
 }
 
@@ -283,7 +302,8 @@ private fun shakeOffset(trigger: Any?): Float {
 @Composable
 fun Field(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, placeholder: String = "",
           singleLine: Boolean = true, minLines: Int = 1, enabled: Boolean = true, password: Boolean = false, number: Boolean = false,
-          icon: ImageVector? = null, error: String? = null, helper: String? = null, maxLength: Int? = null, onSubmit: (() -> Unit)? = null) {
+          icon: ImageVector? = null, error: String? = null, helper: String? = null, maxLength: Int? = null, onSubmit: (() -> Unit)? = null,
+          testTag: String? = null) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val hovered by interaction.collectIsHoveredAsState()
@@ -310,7 +330,8 @@ fun Field(label: String, value: String, onChange: (String) -> Unit, modifier: Mo
                 .hoverable(interaction)
                 .onPreviewKeyEvent {
                     if (onSubmit != null && singleLine && it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter)) { onSubmit(); true } else false
-                },
+                }
+                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
             enabled = enabled, singleLine = singleLine, minLines = minLines, maxLines = if (singleLine) 1 else Int.MAX_VALUE,
             interactionSource = interaction,
             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = if (enabled) Color(0xFF1E1E1E) else Palette.Muted),
@@ -463,7 +484,7 @@ fun ModalHeader(title: String, subtitle: String? = null, icon: ImageVector? = nu
             if (subtitle != null) Text(subtitle.uppercase(), color = Color(0xFF86EFAC), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
             Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
         }
-        IconButton(onClose, Modifier.handCursor()) { Icon(Icons.Filled.Close, "Close", tint = Color.White) }
+        TextAction("Close", color = Color.White, onClick = onClose)
     }
 }
 
@@ -480,7 +501,18 @@ fun InfoTile(label: String, value: String, icon: ImageVector? = null, modifier: 
 }
 
 @Composable
-fun Avatar(src: String, size: Dp) = AsyncImage(src, Modifier.size(size).clip(CircleShape).border(2.dp, Color.White, CircleShape))
+fun Avatar(src: String, size: Dp) {
+    if (src.isBlank()) {
+        Box(
+            Modifier.size(size).clip(CircleShape).background(Color(0xFFE2E8F0)).border(2.dp, Color.White, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Person, "Default profile picture", Modifier.size(size * 0.58f), tint = Color(0xFF64748B))
+        }
+    } else {
+        AsyncImage(src, Modifier.size(size).clip(CircleShape).border(2.dp, Color.White, CircleShape))
+    }
+}
 
 @Composable
 fun SectionHeader(title: String, subtitle: String? = null, action: (@Composable () -> Unit)? = null) {
@@ -512,7 +544,7 @@ fun RatingText(rating: Double, count: Int) = Row(verticalAlignment = Alignment.C
 
 @Composable
 fun PhotoCard(image: String, title: String, locationTag: String, rating: Double, reviews: Int, price: Int, favorited: Boolean,
-              onFavorite: () -> Unit, onClick: () -> Unit) {
+              onFavorite: () -> Unit, onClick: () -> Unit, priceLabel: String? = null) {
     GlassCard(padding = 0.dp, onClick = onClick) {
         Box(Modifier.fillMaxWidth().height(200.dp)) {
             AsyncImage(image, Modifier.fillMaxSize())
@@ -527,10 +559,10 @@ fun PhotoCard(image: String, title: String, locationTag: String, rating: Double,
             Text(title, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = Palette.Deep, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RatingText(rating, reviews)
+                if (reviews > 0) RatingText(rating, reviews) else Text("New listing", fontSize = 11.sp, color = Palette.Muted)
                 Spacer(Modifier.weight(1f))
-                Text("$PESO$price", fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
-                Text(" /person", fontSize = 11.sp, color = Palette.Muted)
+                Text(priceLabel ?: "$PESO$price", fontWeight = FontWeight.ExtraBold, color = if (priceLabel == null) Palette.Forest else Color(0xFF92400E))
+                if (priceLabel == null) Text(" /person", fontSize = 11.sp, color = Palette.Muted)
             }
         }
     }

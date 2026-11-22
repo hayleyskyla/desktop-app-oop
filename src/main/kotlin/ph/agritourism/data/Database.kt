@@ -12,13 +12,30 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
 import java.sql.ResultSet
+import java.time.LocalDate
+import java.time.LocalTime
+
+class AdminSetup internal constructor(val email: String, val password: String)
+
+private fun readAdminSetupFromEnvironment(): AdminSetup? {
+    val email = System.getenv("AGRITOURISM_ADMIN_EMAIL")?.trim().orEmpty()
+    val password = System.getenv("AGRITOURISM_ADMIN_PASSWORD").orEmpty()
+    if (email.isBlank() && password.isBlank()) return null
+    require(email.isNotBlank() && password.isNotBlank()) {
+        "Set both AGRITOURISM_ADMIN_EMAIL and AGRITOURISM_ADMIN_PASSWORD to configure the administrator."
+    }
+    return AdminSetup(email, password)
+}
 
 /**
  * SQLite3 persistence layer. Replaces the old browser localStorage + Java/XAMPP MySQL backend.
  * The database file lives in ~/.agritourism/agritourism.db (override with AGRITOURISM_DB)
  * and is seeded from seed.json on first run.
  */
-class Database(val file: File = defaultFile()) {
+class Database(
+    val file: File = defaultFile(),
+    private val adminSetup: AdminSetup? = readAdminSetupFromEnvironment(),
+) {
 
     val conn: Connection
     private var txDepth = 0
@@ -34,9 +51,13 @@ class Database(val file: File = defaultFile()) {
         createSchema()
         if (count("products") == 0 && count("tours") == 0) seed()
         refreshSeedImages()
+        syncBundledTours()
         seedReferenceData()
-        // Older databases stored users without passwords; give them the documented default.
-        exec("UPDATE users SET password_hash=? WHERE password_hash IS NULL OR password_hash=''", hashPassword(DEFAULT_PASSWORD))
+        configureUploadedTourSchedules()
+        // Older non-admin demo accounts had no password; never grant a default password to admins.
+        exec("UPDATE users SET password_hash=? WHERE role<>'admin' AND (password_hash IS NULL OR password_hash='')", hashPassword(DEFAULT_PASSWORD))
+        configureAdminAccount(adminSetup)
+        removeObsoleteBookingNotifications()
     }
 
     companion object {
@@ -84,6 +105,7 @@ class Database(val file: File = defaultFile()) {
                 phone TEXT,
                 password_hash TEXT,
                 role TEXT NOT NULL CHECK (role IN ('user','farmer','admin')),
+                is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP)""",
             """CREATE TABLE IF NOT EXISTS farmers (
                 id INTEGER PRIMARY KEY, name TEXT, role_title TEXT, farm_name TEXT, location TEXT,
@@ -94,7 +116,14 @@ class Database(val file: File = defaultFile()) {
             """CREATE TABLE IF NOT EXISTS tours (
                 id INTEGER PRIMARY KEY, name TEXT, location TEXT, rating REAL, reviews_count INTEGER,
                 price_per_person INTEGER, operating_hours TEXT, amenities TEXT, activities TEXT,
-                image_url TEXT, description TEXT, highlight_tag TEXT, farmer_name TEXT, thumbnails TEXT)""",
+                image_url TEXT, description TEXT, highlight_tag TEXT, farmer_name TEXT, thumbnails TEXT,
+                estimated_duration TEXT NOT NULL DEFAULT '', price_approved INTEGER NOT NULL DEFAULT 1,
+                suggested_price_per_person INTEGER, price_suggestion_basis TEXT NOT NULL DEFAULT '',
+                price_suggestion_source TEXT NOT NULL DEFAULT '',
+                price_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
+                price_type TEXT NOT NULL DEFAULT 'PER_PERSON',
+                booking_enabled INTEGER NOT NULL DEFAULT 1,
+                experience_type TEXT NOT NULL DEFAULT 'tour')""",
             """CREATE TABLE IF NOT EXISTS fruit_picking (
                 id INTEGER PRIMARY KEY, title TEXT, farm_name TEXT, location TEXT, fruit_name TEXT,
                 price_per_person INTEGER, rating REAL, reviews_count INTEGER, duration TEXT,
@@ -121,7 +150,8 @@ class Database(val file: File = defaultFile()) {
             """CREATE TABLE IF NOT EXISTS order_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-                product_name TEXT, qty INTEGER, unit_price REAL)""",
+                product_name TEXT, qty INTEGER, unit_price REAL,
+                product_image_url TEXT NOT NULL DEFAULT '', seller_name TEXT NOT NULL DEFAULT '')""",
             """CREATE TABLE IF NOT EXISTS delivery_steps (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -129,7 +159,7 @@ class Database(val file: File = defaultFile()) {
             """CREATE TABLE IF NOT EXISTS notifications (
                 id INTEGER PRIMARY KEY, title TEXT, description TEXT, full_detail TEXT, time_label TEXT,
                 is_read INTEGER, type TEXT, target_role TEXT, booking_id INTEGER, attendance_status TEXT,
-                sort_order INTEGER)""",
+                sort_order INTEGER, order_id TEXT, event_key TEXT)""",
             """CREATE TABLE IF NOT EXISTS reviews (
                 id INTEGER PRIMARY KEY, author TEXT, role_tag TEXT, rating INTEGER, review_date TEXT,
                 farm_or_crop TEXT, comment TEXT)""",
@@ -167,6 +197,17 @@ class Database(val file: File = defaultFile()) {
     private fun migrate() {
         if ("address" !in columns("users")) exec("ALTER TABLE users ADD COLUMN address TEXT")
         if ("avatar_url" !in columns("users")) exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+        if ("is_active" !in columns("users")) exec("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+        if ("created_at" !in columns("users")) exec("ALTER TABLE users ADD COLUMN created_at TEXT")
+        if ("estimated_duration" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN estimated_duration TEXT NOT NULL DEFAULT ''")
+        if ("price_approved" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN price_approved INTEGER NOT NULL DEFAULT 1")
+        if ("suggested_price_per_person" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN suggested_price_per_person INTEGER")
+        if ("price_suggestion_basis" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN price_suggestion_basis TEXT NOT NULL DEFAULT ''")
+        if ("price_suggestion_source" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN price_suggestion_source TEXT NOT NULL DEFAULT ''")
+        if ("price_status" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN price_status TEXT NOT NULL DEFAULT 'UNVERIFIED'")
+        if ("price_type" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN price_type TEXT NOT NULL DEFAULT 'PER_PERSON'")
+        if ("booking_enabled" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN booking_enabled INTEGER NOT NULL DEFAULT 1")
+        if ("experience_type" !in columns("tours")) exec("ALTER TABLE tours ADD COLUMN experience_type TEXT NOT NULL DEFAULT 'tour'")
         // Payment proof photos are no longer used; the old sample receipt showed a fixed amount.
         exec("UPDATE orders SET uploaded_receipt_url='' WHERE uploaded_receipt_url LIKE '%receipt.png'")
         if ("customer_email" !in columns("orders")) exec("ALTER TABLE orders ADD COLUMN customer_email TEXT")
@@ -182,15 +223,47 @@ class Database(val file: File = defaultFile()) {
             if ("archived" !in columns(t)) exec("ALTER TABLE $t ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         }
         if ("product_id" !in columns("order_items")) exec("ALTER TABLE order_items ADD COLUMN product_id INTEGER")
+        if ("product_image_url" !in columns("order_items")) exec("ALTER TABLE order_items ADD COLUMN product_image_url TEXT NOT NULL DEFAULT ''")
+        if ("seller_name" !in columns("order_items")) exec("ALTER TABLE order_items ADD COLUMN seller_name TEXT NOT NULL DEFAULT ''")
+        if ("order_id" !in columns("notifications")) exec("ALTER TABLE notifications ADD COLUMN order_id TEXT")
+        if ("event_key" !in columns("notifications")) exec("ALTER TABLE notifications ADD COLUMN event_key TEXT")
+        exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_event_recipient ON notifications(event_key, COALESCE(recipient_email,'')) WHERE event_key IS NOT NULL")
+        exec("""UPDATE order_items SET product_image_url=COALESCE(
+                (SELECT image_url FROM products WHERE products.id=order_items.product_id), '')
+                WHERE product_image_url=''""")
+        exec("""UPDATE order_items SET seller_name=COALESCE(
+                (SELECT farmers.farm_name FROM products JOIN farmers ON farmers.id=products.farmer_id
+                 WHERE products.id=order_items.product_id),
+                (SELECT farm_origin FROM products WHERE products.id=order_items.product_id), '')
+                WHERE seller_name=''""")
         exec("UPDATE users SET farmer_id=1 WHERE farmer_id IS NULL AND lower(email)=lower(?)", Role.FARMER.email)
         assignFarmOwnership()
         linkOrderItems()
+        exec("""UPDATE order_items SET product_image_url=COALESCE(
+                (SELECT image_url FROM products WHERE products.id=order_items.product_id), '')
+                WHERE product_image_url=''""")
+        exec("""UPDATE order_items SET seller_name=COALESCE(
+                (SELECT farmers.farm_name FROM products JOIN farmers ON farmers.id=products.farmer_id
+                 WHERE products.id=order_items.product_id),
+                (SELECT farm_origin FROM products WHERE products.id=order_items.product_id), '')
+                WHERE seller_name=''""")
         val bookingCols = columns("bookings")
         if ("activity_type" !in bookingCols) {
             exec("ALTER TABLE bookings ADD COLUMN activity_type TEXT NOT NULL DEFAULT 'tour'")
             classifyBookings()
         }
         if ("slot_key" !in bookingCols) exec("ALTER TABLE bookings ADD COLUMN slot_key TEXT")
+        exec("UPDATE bookings SET payment_method=? WHERE payment_method IS NULL OR payment_method<>?", PAY_AT_FARM_PAYMENT_METHOD, PAY_AT_FARM_PAYMENT_METHOD)
+        exec("UPDATE orders SET payment_method=? WHERE payment_method IS NULL OR payment_method<>?", COD_PAYMENT_METHOD, COD_PAYMENT_METHOD)
+        // Keep legacy orders but collapse delivery milestones into the supported marketplace states.
+        exec("""UPDATE orders SET fulfillment_status = CASE fulfillment_status
+            WHEN 'Pending Packing' THEN 'Pending'
+            WHEN 'Packed' THEN 'Confirmed'
+            WHEN 'Dispatched' THEN 'Confirmed'
+            WHEN 'Out for Delivery' THEN 'Confirmed'
+            WHEN 'Delivered' THEN 'Confirmed'
+            ELSE fulfillment_status END
+            WHERE fulfillment_status IN ('Pending Packing', 'Packed', 'Dispatched', 'Out for Delivery', 'Delivered')""")
         // Fill slot keys for older rows; legacy duplicates get a unique suffix so the index can be built.
         val seen = mutableSetOf<String>()
         bookings().forEach { b ->
@@ -226,6 +299,47 @@ class Database(val file: File = defaultFile()) {
         }
     }
 
+    private fun configureAdminAccount(setup: AdminSetup?) = tx {
+        val admins = query("SELECT * FROM users WHERE role='admin' ORDER BY id", map = ::mapUser)
+        admins.forEach { admin ->
+            val stored = query("SELECT password_hash FROM users WHERE id=?", admin.id) { it.getString(1) }.firstOrNull()
+            if (verifyPassword(DEFAULT_PASSWORD, stored)) {
+                val disabledPassword = java.util.UUID.randomUUID().toString() + java.util.UUID.randomUUID().toString()
+                exec("UPDATE users SET password_hash=? WHERE id=?", hashPassword(disabledPassword), admin.id)
+            }
+        }
+
+        if (setup != null) {
+            val email = setup.email.trim()
+            require(Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(email)) {
+                "AGRITOURISM_ADMIN_EMAIL must be a valid email address."
+            }
+            require(setup.password.length >= 12) {
+                "AGRITOURISM_ADMIN_PASSWORD must contain at least 12 characters."
+            }
+            val matchingAdmin = admins.firstOrNull { it.email.equals(email, ignoreCase = true) }
+            val emailOwner = findUser(email)
+            check(emailOwner == null || emailOwner.role == Role.ADMIN) {
+                "AGRITOURISM_ADMIN_EMAIL is already assigned to a non-administrator account."
+            }
+            if (matchingAdmin != null) {
+                exec("UPDATE users SET password_hash=? WHERE id=?", hashPassword(setup.password), matchingAdmin.id)
+            } else {
+                exec("INSERT INTO users (full_name, email, phone, password_hash, role) VALUES (?,?,?,?,?)",
+                    "Administrator", email, "", hashPassword(setup.password), Role.ADMIN.key)
+            }
+        }
+    }
+
+    /**
+     * Retires the two generic "Booking"/"Tour Booking Confirmed" notices. Real booking updates
+     * (acceptance, decline, attendance, cancellation) are kept and relabelled as booking updates.
+     */
+    private fun removeObsoleteBookingNotifications() = tx {
+        exec("DELETE FROM notifications WHERE title IN ('Booking', 'Tour Booking Confirmed')")
+        exec("UPDATE notifications SET type='booking_update' WHERE type='booking'")
+    }
+
     /** Older databases point at remote (some now dead) image URLs; swap them for the bundled copies. */
     private fun localizeImages() {
         val cols = listOf("farmers" to "photo_url", "farmers" to "farm_banner_url", "tours" to "image_url", "tours" to "thumbnails",
@@ -254,6 +368,54 @@ class Database(val file: File = defaultFile()) {
         conn.createStatement().use { it.execute("PRAGMA user_version = $version") }
     }
 
+    /** Adds or refreshes exact-name bundled destinations while preserving row identities and schedules. */
+    private fun syncBundledTours() {
+        val version = 6
+        val sourceVersion = query("PRAGMA user_version") { it.getInt(1) }.first()
+        if (sourceVersion >= version) return
+        val firstImport = sourceVersion < 3
+        val bundledTours = loadSeed().tours.filter { it.suggestedPricePerPerson != null }
+        tx {
+            bundledTours.forEach { bundled ->
+                val existing = tours().firstOrNull { it.name == bundled.name }
+                if (existing == null) {
+                    createTour(bundled.copy(
+                        id = 0,
+                        farmerId = null,
+                        archived = false,
+                        pricePerPerson = bundled.suggestedPricePerPerson ?: bundled.pricePerPerson,
+                        priceApproved = true,
+                    ))
+                } else {
+                    updateTour(existing.copy(
+                        location = bundled.location,
+                        pricePerPerson = if (firstImport || existing.pricePerPerson <= 0) {
+                            bundled.suggestedPricePerPerson ?: bundled.pricePerPerson
+                        } else {
+                            existing.pricePerPerson
+                        },
+                        operatingHours = existing.operatingHours.ifBlank { bundled.operatingHours },
+                        amenities = bundled.amenities,
+                        activities = bundled.activities,
+                        imageUrl = bundled.imageUrl,
+                        description = bundled.description,
+                        highlightTag = bundled.highlightTag,
+                        farmerName = bundled.farmerName,
+                        thumbnails = bundled.thumbnails,
+                        estimatedDuration = bundled.estimatedDuration,
+                        priceApproved = true,
+                        suggestedPricePerPerson = bundled.suggestedPricePerPerson,
+                        priceSuggestionBasis = bundled.priceSuggestionBasis,
+                        priceSuggestionSource = bundled.priceSuggestionSource,
+                        priceStatus = bundled.priceStatus,
+                        priceType = bundled.priceType,
+                    ))
+                }
+            }
+        }
+        conn.createStatement().use { it.execute("PRAGMA user_version = $version") }
+    }
+
     /** Fills guides, couriers, time slots and settings from seed.json when missing (new or upgraded databases). */
     private fun seedReferenceData() {
         val s = loadSeed()
@@ -266,6 +428,26 @@ class Database(val file: File = defaultFile()) {
             if (count("faqs") == 0) s.faqs.forEachIndexed { i, f ->
                 exec("INSERT INTO faqs (question, answer, sort_order) VALUES (?,?,?)", f.question, f.answer, i)
             }
+            exec(
+                "UPDATE faqs SET answer=? WHERE lower(question)=lower(?)",
+                "Choose a date and available time slot, then pay at the farm. Your ticket appears under My Bookings.",
+                "How do I book a farm tour or fruit picking?",
+            )
+            val paymentQuestion = "What payment methods are accepted?"
+            val paymentAnswer = "For farm product orders, customers can use Cash on Delivery (COD), where available. For tour bookings, payment is made directly at the farm through Pay at the Farm."
+            val paymentFaqId = query(
+                "SELECT id FROM faqs WHERE lower(question)=lower(?) OR lower(question)=lower(?) ORDER BY id LIMIT 1",
+                "How do I pay?", paymentQuestion,
+            ) { it.getInt(1) }.firstOrNull()
+            if (paymentFaqId == null) {
+                exec("INSERT INTO faqs (question, answer, sort_order) VALUES (?,?,?)", paymentQuestion, paymentAnswer, count("faqs"))
+            } else {
+                exec("UPDATE faqs SET question=?, answer=? WHERE id=?", paymentQuestion, paymentAnswer, paymentFaqId)
+                exec(
+                    "DELETE FROM faqs WHERE id<>? AND lower(question)=lower(?)",
+                    paymentFaqId, paymentQuestion,
+                )
+            }
             if (count("time_slots") == 0) s.timeSlots.forEachIndexed { i, t ->
                 exec("INSERT INTO time_slots (activity_type, activity_id, label, sort_order) VALUES (?,?,?,?)", t.activityType, t.activityId, t.label, i)
             }
@@ -275,6 +457,46 @@ class Database(val file: File = defaultFile()) {
             s.users.filter { it.address.isNotBlank() }.forEach {
                 exec("UPDATE users SET address=? WHERE lower(email)=lower(?) AND (address IS NULL OR address='')", it.address, it.email)
             }
+        }
+    }
+
+    /**
+     * Configures daily operating hours and hourly booking starts for the seven bundled tours that
+     * previously had no schedule. Uses a settings marker rather than PRAGMA user_version, which is
+     * already owned by bundled-tour synchronization.
+     */
+    private fun configureUploadedTourSchedules() {
+        val marker = "migration.uploaded_tour_daily_schedule.v1"
+        if (settings()[marker] == "complete") return
+        val names = listOf(
+            "Bantug Lake Ranch",
+            "Burnham Park",
+            "Chocolate Hills",
+            "Garin Farm",
+            "Northern Blossom Flower Farm",
+            "Sagada Hanging Coffins",
+            "SVD Laudato Si' Farm",
+        )
+        val starts = listOf(
+            "07:00 AM", "08:00 AM", "09:00 AM", "10:00 AM", "11:00 AM",
+            "12:00 PM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM",
+        )
+        tx {
+            names.forEach { name ->
+                val matches = query("SELECT id FROM tours WHERE name=?", name) { it.getInt(1) }
+                check(matches.size == 1) { "Expected exactly one bundled tour named \"$name\"; found ${matches.size}." }
+                val id = matches.single()
+                exec("UPDATE tours SET operating_hours='7:00 AM - 5:00 PM', booking_enabled=1, archived=0 WHERE id=?", id)
+                exec("DELETE FROM time_slots WHERE activity_type='tour' AND activity_id=?", id)
+                starts.forEachIndexed { index, start ->
+                    val end = starts.getOrNull(index + 1) ?: "05:00 PM"
+                    exec(
+                        "INSERT INTO time_slots (activity_type, activity_id, label, sort_order) VALUES ('tour',?,?,?)",
+                        id, "$start - $end", index,
+                    )
+                }
+            }
+            setSetting(marker, "complete")
         }
     }
 
@@ -308,6 +530,29 @@ class Database(val file: File = defaultFile()) {
             type, activityId, label.trim())
     fun deleteTimeSlot(id: Int) = exec("DELETE FROM time_slots WHERE id=?", id)
 
+    /**
+     * Syncs an activity's time slots to exactly [desiredLabels] (deduplicated by start time),
+     * preserving any existing slot whose start time is in [preserveStarts] (e.g. an active booking)
+     * so confirmed reservations keep their time when operating hours change. Slots are re-sorted
+     * chronologically so the UI and booking flow list them in order.
+     */
+    fun replaceTimeSlots(type: String, activityId: Int, desiredLabels: List<String>, preserveStarts: Set<String> = emptySet()) = tx {
+        val existing = timeSlots().filter { it.activityType == type && it.activityId == activityId }
+        val existingByStart = existing.associateBy { slotTime(it.label) }
+        val desiredByStart = desiredLabels.associateBy { slotTime(it) }
+        existing.filter { slotTime(it.label) !in desiredByStart && slotTime(it.label) !in preserveStarts }
+            .forEach { exec("DELETE FROM time_slots WHERE id=?", it.id) }
+        desiredByStart.forEach { (start, label) ->
+            if (start !in existingByStart) {
+                exec("INSERT INTO time_slots (activity_type, activity_id, label, sort_order) VALUES (?,?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM time_slots))",
+                    type, activityId, label)
+            }
+        }
+        timeSlots().filter { it.activityType == type && it.activityId == activityId }
+            .sortedBy { parseSlotStart(it.label) ?: LocalTime.MAX }
+            .forEachIndexed { i, slot -> exec("UPDATE time_slots SET sort_order=? WHERE id=?", i, slot.id) }
+    }
+
     private fun seed() {
         val s = loadSeed()
         tx {
@@ -315,7 +560,7 @@ class Database(val file: File = defaultFile()) {
             s.tours.forEach(::saveTour)
             s.fruitPicking.forEach(::saveFruit)
             s.products.forEachIndexed { i, p -> saveProduct(p, i) }
-            s.bookings.forEachIndexed { i, b -> saveBooking(b, i) }
+            s.bookings.forEachIndexed { i, b -> saveBooking(b, i, validateSchedule = false) }
             s.orders.forEachIndexed { i, o -> saveOrder(o, i) }
             s.notifications.forEachIndexed { i, n -> saveNotification(n, i) }
             s.reviews.forEach(::saveReview)
@@ -385,9 +630,37 @@ class Database(val file: File = defaultFile()) {
     fun minSort(table: String): Int =
         conn.createStatement().use { it.executeQuery("SELECT COALESCE(MIN(sort_order),0) FROM $table").use { r -> r.next(); r.getInt(1) } }
 
+    private val fileReference = Regex("file:[^\\s\"',]+")
+
+    private fun fileRefsIn(sql: String, vararg args: Any?): Set<String> =
+        query(sql, *args) { r ->
+            (1..r.metaData.columnCount).joinToString(" ") { r.getString(it).orEmpty() }
+        }.flatMap { row -> fileReference.findAll(row).map { it.value }.toList() }.toSet()
+
+    /** Deletes uploaded images that no remaining row (including historical orders) still uses. */
+    private fun deleteUnreferencedUploads(candidates: Set<String>) {
+        val referenced = listOf(
+            "SELECT photo_url, farm_banner_url, gallery FROM farmers",
+            "SELECT image_url, thumbnails FROM tours",
+            "SELECT image_url, thumbnails FROM fruit_picking",
+            "SELECT image_url FROM products",
+            "SELECT avatar_url FROM users",
+            "SELECT uploaded_receipt_url FROM orders",
+            "SELECT product_image_url FROM order_items",
+            "SELECT uploaded_id_doc, uploaded_receipt_doc FROM bookings",
+        ).flatMap(::fileRefsIn).toSet()
+        val uploadRoot = File(file.absoluteFile.parentFile, "uploads").absolutePath
+        candidates.asSequence()
+            .filter { it.startsWith("file:") }
+            .map { it.removePrefix("file:") }
+            .filter { it.startsWith(uploadRoot, ignoreCase = true) && it !in referenced }
+            .forEach { runCatching { File(it).delete() } }
+    }
+
     // ------------------------------------------------------------------ users
     private fun mapUser(r: ResultSet) = User(r.getLong("id"), r.str("full_name")!!, r.str("email")!!, r.str("phone") ?: "",
-        Role.of(r.str("role")!!), r.getInt("farmer_id").takeIf { !r.wasNull() }, r.str("address") ?: "", r.str("avatar_url") ?: "")
+        Role.of(r.str("role")!!), r.getInt("farmer_id").takeIf { !r.wasNull() }, r.str("address") ?: "", r.str("avatar_url") ?: "",
+        r.getInt("is_active") == 1, r.str("created_at") ?: "")
 
     /** The account that manages a farm, if any. */
     fun farmerAccount(farmerId: Int): User? =
@@ -406,8 +679,19 @@ class Database(val file: File = defaultFile()) {
     fun findUser(email: String): User? =
         query("SELECT * FROM users WHERE lower(email)=lower(?)", email.trim(), map = ::mapUser).firstOrNull()
 
+    fun users(): List<User> = query("SELECT * FROM users ORDER BY role, lower(full_name), id", map = ::mapUser)
+
+    fun setUserActive(id: Long, active: Boolean) =
+        exec("UPDATE users SET is_active=? WHERE id=?", active, id)
+
+    fun activeAdminCount(): Int =
+        query("SELECT COUNT(*) FROM users WHERE role='admin' AND is_active=1") { it.getInt(1) }.first()
+
     /** Inserts a new account; returns null if the email is already registered. */
     fun createUser(fullName: String, email: String, phone: String, password: String, role: String): User? {
+        require(role == Role.USER.key || role == Role.FARMER.key) {
+            "Administrator accounts must be configured by the system owner."
+        }
         if (findUser(email) != null) return null
         exec("INSERT INTO users (full_name, email, phone, password_hash, role) VALUES (?,?,?,?,?)",
             fullName.trim(), email.trim(), phone.trim(), hashPassword(password), role)
@@ -417,7 +701,8 @@ class Database(val file: File = defaultFile()) {
     /** Returns the user if the email/password pair matches a stored account. */
     fun authenticate(email: String, password: String): User? {
         val hash = query("SELECT password_hash FROM users WHERE lower(email)=lower(?)", email.trim()) { it.getString(1) }.firstOrNull()
-        return if (verifyPassword(password, hash)) findUser(email) else null
+        val user = findUser(email)
+        return user?.takeIf { it.isActive && verifyPassword(password, hash) }
     }
 
     fun updateUserProfile(id: Long, fullName: String, phone: String) =
@@ -427,7 +712,89 @@ class Database(val file: File = defaultFile()) {
 
     fun updateUserAddress(id: Long, address: String) = exec("UPDATE users SET address=? WHERE id=?", address.trim(), id)
 
+    /**
+     * Updates the sign-in email while keeping the account's own bookings, orders, cart,
+     * favorites, reviews and notifications linked to it. Returns false for an invalid or
+     * already registered email so one tourist can never take over another account's records.
+     */
+    fun updateUserEmail(id: Long, newEmail: String): Boolean = tx {
+        val email = newEmail.trim().lowercase()
+        if (!Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(email)) return@tx false
+        val current = query("SELECT email FROM users WHERE id=?", id) { it.getString(1) }.firstOrNull()
+            ?: return@tx false
+        if (current.equals(email, ignoreCase = true)) return@tx true
+        if (findUser(email) != null) return@tx false
+        exec("UPDATE users SET email=? WHERE id=?", email, id)
+        exec("UPDATE bookings SET customer_email=? WHERE lower(customer_email)=lower(?)", email, current)
+        exec("UPDATE orders SET customer_email=? WHERE lower(customer_email)=lower(?)", email, current)
+        exec("UPDATE notifications SET recipient_email=? WHERE lower(COALESCE(recipient_email,''))=lower(?)", email, current)
+        exec("UPDATE user_cart SET user_email=? WHERE lower(user_email)=lower(?)", email, current)
+        exec("UPDATE user_favorites SET user_email=? WHERE lower(user_email)=lower(?)", email, current)
+        exec("UPDATE reviews SET user_email=? WHERE lower(COALESCE(user_email,''))=lower(?)", email, current)
+        true
+    }
+
     fun userCount(): Int = count("users")
+
+    /** Deletes a tourist account while keeping its historical bookings and orders intact. */
+    fun deleteTouristAccount(userId: Long): Boolean = tx {
+        val user = query("SELECT * FROM users WHERE id=?", userId, map = ::mapUser).firstOrNull() ?: return@tx false
+        if (user.role != Role.USER) return@tx false
+        exec("DELETE FROM notifications WHERE recipient_email=?", user.email)
+        exec("DELETE FROM user_cart WHERE user_email=?", user.email)
+        exec("DELETE FROM user_favorites WHERE user_email=?", user.email)
+        exec("DELETE FROM users WHERE id=?", userId)
+        true
+    }
+
+    /**
+     * Deletes a farmer account and its active farm data in one transaction. Listings are archived
+     * instead of removed so historical bookings, orders and payments keep their linked farm;
+     * guides, schedule slots, reviews and stale cart/favorite references are removed. Uploaded
+     * media is deleted only when no remaining row (including an order item) still references it.
+     */
+    fun deleteFarmerAccount(userId: Long): Boolean = tx {
+        val user = query("SELECT * FROM users WHERE id=?", userId, map = ::mapUser).firstOrNull() ?: return@tx false
+        if (user.role != Role.FARMER) return@tx false
+        val uploads = mutableSetOf<String>()
+        user.farmerId?.let { farmerId ->
+            val tourIds = query("SELECT id FROM tours WHERE farmer_id=?", farmerId) { it.getInt(1) }
+            val orchardIds = query("SELECT id FROM fruit_picking WHERE farmer_id=?", farmerId) { it.getInt(1) }
+            val productIds = query("SELECT id FROM products WHERE farmer_id=?", farmerId) { it.getLong(1) }
+
+            uploads += fileRefsIn("SELECT photo_url, farm_banner_url, gallery FROM farmers WHERE id=?", farmerId)
+            uploads += fileRefsIn("SELECT image_url, thumbnails FROM tours WHERE farmer_id=?", farmerId)
+            uploads += fileRefsIn("SELECT image_url, thumbnails FROM fruit_picking WHERE farmer_id=?", farmerId)
+            uploads += fileRefsIn("SELECT image_url FROM products WHERE farmer_id=?", farmerId)
+
+            // Keep the rows for history but hide them from the marketplace and clear their media.
+            exec("UPDATE tours SET archived=1, image_url='', thumbnails='[]' WHERE farmer_id=?", farmerId)
+            exec("UPDATE fruit_picking SET archived=1, image_url='', thumbnails='[]' WHERE farmer_id=?", farmerId)
+            exec("UPDATE products SET archived=1, image_url='' WHERE farmer_id=?", farmerId)
+
+            tourIds.forEach {
+                exec("DELETE FROM time_slots WHERE activity_type='tour' AND activity_id=?", it)
+                exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong())
+                exec("DELETE FROM reviews WHERE target_type='tour' AND target_id=?", it)
+            }
+            orchardIds.forEach {
+                exec("DELETE FROM time_slots WHERE activity_type='orchard' AND activity_id=?", it)
+                exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong() + 100)
+                exec("DELETE FROM reviews WHERE target_type='orchard' AND target_id=?", it)
+            }
+            productIds.forEach { exec("DELETE FROM user_cart WHERE product_id=?", it) }
+
+            exec("DELETE FROM guides WHERE farmer_id=?", farmerId)
+            exec("DELETE FROM farmers WHERE id=?", farmerId)
+        }
+        uploads += fileRefsIn("SELECT avatar_url FROM users WHERE id=?", userId)
+        exec("DELETE FROM notifications WHERE recipient_email=?", user.email)
+        exec("DELETE FROM user_cart WHERE user_email=?", user.email)
+        exec("DELETE FROM user_favorites WHERE user_email=?", user.email)
+        exec("DELETE FROM users WHERE id=?", userId)
+        deleteUnreferencedUploads(uploads)
+        true
+    }
 
     // ------------------------------------------------------------------ farmers / tours / fruit
     private fun saveFarmer(f: FarmerProfile) = exec(
@@ -445,6 +812,19 @@ class Database(val file: File = defaultFile()) {
     fun updateFarmerBanner(id: Int, url: String) = exec("UPDATE farmers SET farm_banner_url=? WHERE id=?", url, id)
     fun updateFarmerStory(id: Int, storyQuote: String, biography: String) =
         exec("UPDATE farmers SET story_quote=?, full_biography=? WHERE id=?", storyQuote.trim(), biography.trim(), id)
+
+    fun updateFarmerDetails(id: Int, ownerName: String, farmName: String, location: String, province: String): Int = tx {
+        val updated = exec(
+            "UPDATE farmers SET name=?, farm_name=?, location=?, province=? WHERE id=?",
+            ownerName.trim(), farmName.trim(), location.trim(), province.trim(), id,
+        )
+        if (updated == 0) return@tx 0
+        exec("UPDATE users SET full_name=? WHERE farmer_id=? AND role='farmer'", ownerName.trim(), id)
+        exec("UPDATE tours SET farmer_name=?, location=? WHERE farmer_id=?", ownerName.trim(), location.trim(), id)
+        exec("UPDATE fruit_picking SET farm_name=?, location=? WHERE farmer_id=?", farmName.trim(), location.trim(), id)
+        exec("UPDATE products SET farm_origin=? WHERE farmer_id=?", "$farmName (${province.trim()})", id)
+        updated
+    }
 
     /** Adds a tour owned by a farm; the farm's main tour is set if it has none. Returns the new id. */
     fun createTour(t: FarmTour): Int = tx {
@@ -500,15 +880,26 @@ class Database(val file: File = defaultFile()) {
 
     private fun saveTour(t: FarmTour) = exec(
         insertSql("tours", listOf("id", "name", "location", "rating", "reviews_count", "price_per_person",
-            "operating_hours", "amenities", "activities", "image_url", "description", "highlight_tag", "farmer_name", "thumbnails", "farmer_id", "archived")),
+            "operating_hours", "amenities", "activities", "image_url", "description", "highlight_tag", "farmer_name",
+            "thumbnails", "farmer_id", "archived", "estimated_duration", "price_approved", "suggested_price_per_person",
+            "price_suggestion_basis", "price_suggestion_source", "price_status", "price_type", "booking_enabled", "experience_type")),
         t.id, t.name, t.location, t.rating, t.reviewsCount, t.pricePerPerson, t.operatingHours, t.amenities.enc(),
         t.activities.enc(), t.imageUrl, t.description, t.highlightTag, t.farmerName, t.thumbnails.enc(), t.farmerId, t.archived,
+        t.estimatedDuration, t.priceApproved, t.suggestedPricePerPerson, t.priceSuggestionBasis, t.priceSuggestionSource,
+        t.priceStatus.name, t.priceType.name, t.bookingEnabled, t.experienceType,
     )
 
-    /** Updates a tour's editable fields (keeps rating, reviews and owner). */
+    /** Updates tour details in place while preserving ratings, reviews and booking references. */
     fun updateTour(t: FarmTour) = exec(
-        "UPDATE tours SET name=?, price_per_person=?, operating_hours=?, activities=?, image_url=?, description=? WHERE id=?",
-        t.name, t.pricePerPerson, t.operatingHours, t.activities.enc(), t.imageUrl, t.description, t.id,
+        """UPDATE tours SET name=?, location=?, price_per_person=?, operating_hours=?, amenities=?, activities=?,
+           image_url=?, description=?, highlight_tag=?, farmer_name=?, thumbnails=?, estimated_duration=?, farmer_id=?,
+           price_approved=?, suggested_price_per_person=?, price_suggestion_basis=?, price_suggestion_source=?,
+           price_status=?, price_type=?, booking_enabled=?, experience_type=?
+           WHERE id=?""",
+        t.name, t.location, t.pricePerPerson, t.operatingHours, t.amenities.enc(), t.activities.enc(), t.imageUrl,
+        t.description, t.highlightTag, t.farmerName, t.thumbnails.enc(), t.estimatedDuration, t.farmerId, t.priceApproved,
+        t.suggestedPricePerPerson, t.priceSuggestionBasis, t.priceSuggestionSource, t.priceStatus.name, t.priceType.name,
+        t.bookingEnabled, t.experienceType, t.id,
     )
 
     /** Soft-deletes (or restores) a tour, orchard or product so history that points at it keeps working. */
@@ -519,12 +910,19 @@ class Database(val file: File = defaultFile()) {
     }
 
     fun tours(): List<FarmTour> = query("SELECT * FROM tours ORDER BY id") { r ->
+        val suggestedPrice = r.getInt("suggested_price_per_person").takeUnless { r.wasNull() }
+        val priceStatus = runCatching { TourPriceStatus.valueOf(r.str("price_status") ?: "") }
+            .getOrDefault(TourPriceStatus.UNVERIFIED)
+        val priceType = runCatching { TourPriceType.valueOf(r.str("price_type") ?: "") }
+            .getOrDefault(TourPriceType.PER_PERSON)
         FarmTour(
             r.getInt("id"), r.str("name")!!, r.str("location")!!, r.getDouble("rating"), r.getInt("reviews_count"),
             r.getInt("price_per_person"), r.str("operating_hours")!!, r.str("amenities")!!.decList(),
             r.str("activities")!!.decList(), r.str("image_url")!!, r.str("description")!!, r.str("highlight_tag")!!,
             r.str("farmer_name")!!, r.str("thumbnails")!!.decList(), r.getInt("farmer_id").takeIf { !r.wasNull() },
-            r.getInt("archived") == 1,
+            r.getInt("archived") == 1, r.str("estimated_duration") ?: "", r.getInt("price_approved") == 1,
+            suggestedPrice, r.str("price_suggestion_basis") ?: "", r.str("price_suggestion_source") ?: "",
+            priceStatus, priceType, r.getInt("booking_enabled") == 1, r.str("experience_type") ?: "tour",
         )
     }
 
@@ -537,8 +935,9 @@ class Database(val file: File = defaultFile()) {
 
     /** Updates an orchard's editable fields (keeps rating, reviews and owner). */
     fun updateOrchard(f: FruitPickingItem) = exec(
-        "UPDATE fruit_picking SET title=?, fruit_name=?, seasonal_fruits=?, price_per_person=?, duration=?, season_availability=?, image_url=?, description=? WHERE id=?",
-        f.title, f.fruitName, f.seasonalFruits, f.pricePerPerson, f.duration, f.seasonAvailability, f.imageUrl, f.description, f.id,
+        "UPDATE fruit_picking SET title=?, farm_name=?, location=?, fruit_name=?, seasonal_fruits=?, price_per_person=?, duration=?, season_availability=?, image_url=?, description=?, farmer_id=? WHERE id=?",
+        f.title, f.farmName, f.location, f.fruitName, f.seasonalFruits, f.pricePerPerson, f.duration, f.seasonAvailability,
+        f.imageUrl, f.description, f.farmerId, f.id,
     )
 
     fun fruitPicking(): List<FruitPickingItem> = query("SELECT * FROM fruit_picking ORDER BY id") { r ->
@@ -561,8 +960,8 @@ class Database(val file: File = defaultFile()) {
 
     /** Updates a product's editable fields in place (keeps sort order, rating and cart/order links). */
     fun updateProduct(p: Product) = exec(
-        "UPDATE products SET name=?, category=?, price=?, unit=?, discount_percent=?, stock=?, image_url=?, description=? WHERE id=?",
-        p.name, p.category, p.price, p.unit, p.discountPercent, p.stock, p.imageUrl, p.description, p.id,
+        "UPDATE products SET name=?, category=?, price=?, unit=?, discount_percent=?, stock=?, image_url=?, description=?, farm_origin=?, farmer_id=? WHERE id=?",
+        p.name, p.category, p.price, p.unit, p.discountPercent, p.stock, p.imageUrl, p.description, p.farmOrigin, p.farmerId, p.id,
     )
 
     fun updateStock(productId: Long, stock: Int) = exec("UPDATE products SET stock=? WHERE id=?", stock, productId)
@@ -579,6 +978,37 @@ class Database(val file: File = defaultFile()) {
     // ------------------------------------------------------------------ bookings
     /** Thrown when a booking would give a customer two active reservations in the same slot. */
     class DoubleBookingException(val existing: Booking) : RuntimeException("Double booking with #${existing.bookingCode}")
+    class InvalidBookingScheduleException(message: String) : RuntimeException(message)
+    class InvalidBookingDateException : RuntimeException("Choose a booking date from today through December 31 of next year.")
+    class InvalidBookingPaymentMethodException : RuntimeException("Farm bookings must use Pay at the Farm.")
+    class InvalidTourPriceException : RuntimeException("This tour has an invalid price.")
+
+    fun bookingScheduleError(activityType: String, activityId: Int, label: String): String? {
+        val slots = timeSlots()
+        val activity = when (activityType) {
+            "tour" -> tours().firstOrNull { it.id == activityId && !it.archived }
+            "orchard" -> {
+                val orchard = fruitPicking().firstOrNull { it.id == activityId && !it.archived }
+                val farmTour = orchard?.farmerId?.let { farmerId ->
+                    val farmer = farmers().firstOrNull { it.id == farmerId }
+                    farmer?.tourId?.takeIf { it > 0 }?.let { tourId -> tours().firstOrNull { it.id == tourId } }
+                        ?: tours().firstOrNull { it.farmerId == farmerId }
+                } ?: orchard?.let { item ->
+                    tours().firstOrNull { it.name.startsWith(item.farmName, ignoreCase = true) }
+                }
+                farmTour
+            }
+            else -> null
+        }
+        val saved = query("SELECT value FROM settings WHERE key=?", "slot_config.$activityType.$activityId") { it.getString(1) }
+            .firstOrNull()?.split("|")?.takeIf { it.size >= 2 }
+        val hours = saved?.let { "${it[0]} - ${it[1]}" } ?: activity?.operatingHours
+        val duration = if (activityType == "orchard") fruitPicking().firstOrNull { it.id == activityId && !it.archived }?.duration else null
+        return bookingScheduleError(activityType, activityId, label, hours, duration, slots)
+    }
+
+    fun bookingScheduleError(booking: Booking): String? =
+        bookingScheduleError(booking.activityType, booking.farmId, booking.tourTime)
 
     /** Another active booking by the same customer at the same date and time, if any. */
     fun conflictingBooking(b: Booking): Booking? {
@@ -587,7 +1017,21 @@ class Database(val file: File = defaultFile()) {
         return id?.let { cid -> bookings().firstOrNull { it.id == cid } }
     }
 
-    fun saveBooking(b: Booking, sortOrder: Int? = null) {
+    fun saveBooking(b: Booking, sortOrder: Int? = null, validateSchedule: Boolean = true) {
+        if (b.paymentMethod != PAY_AT_FARM_PAYMENT_METHOD) throw InvalidBookingPaymentMethodException()
+        val existingDate = query("SELECT tour_date FROM bookings WHERE id=? AND booking_code=?", b.id, b.bookingCode) { it.getString(1) }.firstOrNull()
+        val existingBooking = existingDate != null
+        if (validateSchedule && (!existingBooking || existingDate != b.tourDate)) {
+            val date = runCatching { LocalDate.parse(b.tourDate) }.getOrNull()
+            if (date == null || !BookingDateWindow.current().contains(date)) throw InvalidBookingDateException()
+        }
+        if (b.activityType == "tour") {
+            val tour = tours().firstOrNull { it.id == b.farmId && (existingBooking || !it.archived) }
+                ?: throw InvalidBookingScheduleException("This tour is unavailable.")
+            if (!existingBooking && !tour.bookingEnabled) throw InvalidBookingScheduleException("Bookings for this tour are currently unavailable.")
+            if (tour.pricePerPerson < 0) throw InvalidTourPriceException()
+        }
+        if (validateSchedule) bookingScheduleError(b)?.let { throw InvalidBookingScheduleException(it) }
         conflictingBooking(b)?.let { throw DoubleBookingException(it) }
         val order = sortOrder ?: existingSort("bookings", b.id) ?: (minSort("bookings") - 1)
         val cols = listOf("id", "booking_code", "farm_id", "farm_name", "customer_name", "customer_phone",
@@ -635,7 +1079,13 @@ class Database(val file: File = defaultFile()) {
     }
 
     // ------------------------------------------------------------------ orders
+    class StockUnavailableException(message: String) : RuntimeException(message)
+
     fun saveOrder(o: FarmerOrder, sortOrder: Int? = null) = tx {
+        if (o.paymentMethod != COD_PAYMENT_METHOD) throw IllegalArgumentException("Marketplace orders must use Cash on Delivery.")
+        require(o.fulfillmentStatus in setOf("Pending", "Confirmed", "Cancelled")) {
+            "Marketplace orders must use Pending, Confirmed, or Cancelled status."
+        }
         val order = sortOrder ?: existingSort("orders", o.id) ?: (minSort("orders") - 1)
         exec("DELETE FROM order_items WHERE order_id=?", o.id)
         exec("DELETE FROM delivery_steps WHERE order_id=?", o.id)
@@ -650,16 +1100,85 @@ class Database(val file: File = defaultFile()) {
             o.courierName, o.riderName, o.riderPhone, o.riderVehicle, o.currentLocation, o.estimatedArrival,
             o.trackingNumber, o.isReceivedByUser, o.receivedAt, o.receivedByRecipient, order, o.customerEmail,
         )
-        o.items.forEach { exec("INSERT INTO order_items (order_id, product_name, qty, unit_price, product_id) VALUES (?,?,?,?,?)", o.id, it.productName, it.qty, it.unitPrice, it.productId) }
+        o.items.forEach {
+            exec(
+                "INSERT INTO order_items (order_id, product_name, qty, unit_price, product_id, product_image_url, seller_name) VALUES (?,?,?,?,?,?,?)",
+                o.id, it.productName, it.qty, it.unitPrice, it.productId, it.productImageUrl, it.sellerName,
+            )
+        }
         o.deliverySteps.forEachIndexed { i, s ->
             exec("INSERT INTO delivery_steps (order_id, step_index, title, location, timestamp, completed, notes) VALUES (?,?,?,?,?,?,?)",
                 o.id, i, s.title, s.location, s.timestamp, s.completed, s.notes)
         }
     }
 
+    /** Reserves all order stock and saves the order atomically to avoid overselling. */
+    fun saveOrderWithStock(o: FarmerOrder, sortOrder: Int? = null) = tx {
+        require(o.fulfillmentStatus == "Pending") { "New marketplace orders must start as Pending." }
+        val grouped = o.items.groupBy { item ->
+            item.productId ?: throw IllegalArgumentException("Marketplace order items must reference a product.")
+        }
+        grouped.forEach { (productId, items) ->
+            val quantity = items.sumOf { it.qty }
+            require(quantity > 0) { "Marketplace order quantities must be positive." }
+            val changed = exec(
+                "UPDATE products SET stock=stock-? WHERE id=? AND archived=0 AND stock>=?",
+                quantity, productId, quantity,
+            )
+            if (changed != 1) {
+                val available = query("SELECT stock FROM products WHERE id=?", productId) { it.getInt(1) }.firstOrNull() ?: 0
+                throw StockUnavailableException("Only $available unit(s) remain for ${items.first().productName}. Please update your cart.")
+            }
+        }
+        saveOrder(o, sortOrder)
+    }
+
+    /** Applies a one-way marketplace status change; cancellation restores reserved inventory once. */
+    fun transitionOrderStatus(id: String, status: String, allowConfirmedCancellation: Boolean = false): FarmerOrder? = tx {
+        require(status == "Confirmed" || status == "Cancelled") { "Unsupported marketplace order status: $status" }
+        val current = query("SELECT fulfillment_status, is_received_by_user FROM orders WHERE id=?", id) {
+            it.getString(1) to (it.getInt(2) == 1)
+        }.firstOrNull()
+            ?: return@tx null
+        val allowed = when (status) {
+            "Confirmed" -> current.first == "Pending" && !current.second
+            "Cancelled" -> (current.first == "Pending" || allowConfirmedCancellation && current.first == "Confirmed") && !current.second
+            else -> false
+        }
+        if (!allowed || exec(
+                "UPDATE orders SET fulfillment_status=? WHERE id=? AND fulfillment_status=? AND is_received_by_user=0",
+                status, id, current.first,
+            ) != 1)
+            return@tx null
+        if (status == "Cancelled") {
+            query(
+                "SELECT product_id, SUM(qty) FROM order_items WHERE order_id=? AND product_id IS NOT NULL GROUP BY product_id",
+                id,
+            ) { it.getLong(1) to it.getInt(2) }.forEach { (productId, quantity) ->
+                exec("UPDATE products SET stock=stock+? WHERE id=?", quantity, productId)
+            }
+        }
+        orders().firstOrNull { it.id == id }
+    }
+
+    fun updatePendingOrderAddress(id: String, customerEmail: String, address: String): FarmerOrder? = tx {
+        val normalized = address.trim()
+        require(normalized.length in 5..300) { "Enter a delivery address between 5 and 300 characters." }
+        if (exec(
+                """UPDATE orders SET customer_address=?
+                   WHERE id=? AND lower(customer_email)=lower(?) AND fulfillment_status='Pending' AND is_received_by_user=0""",
+                normalized, id, customerEmail.trim(),
+            ) != 1)
+            return@tx null
+        orders().firstOrNull { it.id == id }
+    }
+
     fun orders(): List<FarmerOrder> {
         val items = query("SELECT * FROM order_items ORDER BY id") { r ->
-            r.str("order_id")!! to OrderItem(r.str("product_name")!!, r.getInt("qty"), r.getDouble("unit_price"), r.longOrNull("product_id"))
+            r.str("order_id")!! to OrderItem(
+                r.str("product_name")!!, r.getInt("qty"), r.getDouble("unit_price"), r.longOrNull("product_id"),
+                r.str("product_image_url") ?: "", r.str("seller_name") ?: "",
+            )
         }.groupBy({ it.first }, { it.second })
         val steps = query("SELECT * FROM delivery_steps ORDER BY order_id, step_index") { r ->
             r.str("order_id")!! to DeliveryCheckpoint(r.str("title")!!, r.str("location")!!, r.str("timestamp")!!, r.getInt("completed") == 1, r.str("notes"))
@@ -679,27 +1198,51 @@ class Database(val file: File = defaultFile()) {
         }
     }
 
-    fun deleteOrder(id: String) = tx {
+    /** Only cancelled orders can be permanently removed; active and completed history is retained. */
+    fun deleteOrder(id: String): Boolean = tx {
+        val status = query("SELECT fulfillment_status FROM orders WHERE id=?", id) { it.getString(1) }.firstOrNull()
+            ?: return@tx false
+        if (!status.equals("Cancelled", ignoreCase = true)) return@tx false
         exec("DELETE FROM delivery_steps WHERE order_id=?", id)
         exec("DELETE FROM order_items WHERE order_id=?", id)
+        exec("DELETE FROM notifications WHERE order_id=?", id)
         exec("DELETE FROM orders WHERE id=?", id)
+        true
     }
 
     // ------------------------------------------------------------------ notifications
-    fun saveNotification(n: AppNotification, sortOrder: Int? = null) {
+    fun saveNotification(n: AppNotification, sortOrder: Int? = null): Boolean {
         val order = sortOrder ?: existingSort("notifications", n.id) ?: (minSort("notifications") - 1)
-        exec(
-            insertSql("notifications", listOf("id", "title", "description", "full_detail", "time_label", "is_read", "type",
-                "target_role", "booking_id", "attendance_status", "sort_order", "recipient_email")),
-            n.id, n.title, n.desc, n.fullDetail, n.time, n.read, n.type, n.targetRole, n.bookingId, n.attendanceStatus, order, n.recipientEmail,
+        val cols = listOf("id", "title", "description", "full_detail", "time_label", "is_read", "type",
+            "target_role", "booking_id", "attendance_status", "sort_order", "recipient_email", "order_id", "event_key")
+        val values = arrayOf<Any?>(
+            n.id, n.title, n.desc, n.fullDetail, n.time, n.read, n.type, n.targetRole, n.bookingId, n.attendanceStatus, order,
+            n.recipientEmail, n.orderId, n.eventKey,
         )
+        if (n.eventKey == null) return exec(insertSql("notifications", cols), *values) == 1
+
+        val existingId = query(
+            "SELECT id FROM notifications WHERE event_key=? AND COALESCE(recipient_email,'')=COALESCE(?, '')",
+            n.eventKey, n.recipientEmail,
+        ) { it.getLong(1) }.firstOrNull()
+        if (existingId != null) {
+            if (existingId != n.id) return false
+            return exec(
+                """UPDATE notifications SET title=?, description=?, full_detail=?, time_label=?, is_read=?, type=?,
+                   target_role=?, booking_id=?, attendance_status=?, sort_order=?, recipient_email=?, order_id=?, event_key=?
+                   WHERE id=?""",
+                n.title, n.desc, n.fullDetail, n.time, n.read, n.type, n.targetRole, n.bookingId, n.attendanceStatus,
+                order, n.recipientEmail, n.orderId, n.eventKey, n.id,
+            ) == 1
+        }
+        return exec("INSERT OR IGNORE INTO notifications (${cols.joinToString()}) VALUES (${cols.joinToString { "?" }})", *values) == 1
     }
 
     fun notifications(): List<AppNotification> = query("SELECT * FROM notifications ORDER BY sort_order") { r ->
         AppNotification(
             r.getLong("id"), r.str("title")!!, r.str("description")!!, r.str("full_detail")!!, r.str("time_label")!!,
             r.getInt("is_read") == 1, r.str("type")!!, r.str("target_role")!!, r.longOrNull("booking_id"),
-            r.str("attendance_status"), r.str("recipient_email"),
+            r.str("attendance_status"), r.str("recipient_email"), r.str("order_id"), r.str("event_key"),
         )
     }
 

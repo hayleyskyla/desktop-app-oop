@@ -45,7 +45,7 @@ fun SqlStudioPage(s: AppState) {
         GlassCard(Modifier.width(220.dp)) {
             Label("Tables"); Spacer(Modifier.height(6.dp))
             s.db.tableNames().forEach { t ->
-                Text("🗄 $t", Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { run("SELECT * FROM $t LIMIT 100;") }.padding(8.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(t, Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { run("SELECT * FROM $t LIMIT 100;") }.padding(8.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {

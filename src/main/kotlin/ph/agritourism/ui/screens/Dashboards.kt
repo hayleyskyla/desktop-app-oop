@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +35,11 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ph.agritourism.model.FarmTour
+import ph.agritourism.model.TourPriceStatus
+import ph.agritourism.model.TourPriceType
+import ph.agritourism.model.User
+import ph.agritourism.model.Role
 import ph.agritourism.ui.*
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -107,55 +114,148 @@ fun DataChart(points: List<MonthPoint>, line: Color, fill: Color, modifier: Modi
 
 @Composable
 fun AdminDashboard(s: AppState) {
+    // Refresh on entry so the graph and user table reflect the current database contents.
+    LaunchedEffect(s.activePage) { s.refreshFromDb() }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { H1("Platform Overview"); Sub("Real-time platform metrics, booking trends, and system telemetry") }
-        Pill("● Live data from SQLite", Color(0xFFDCFCE7), Color(0xFF166534))
+        Column(Modifier.weight(1f)) { H1("Platform Overview"); Sub("Read-only monitoring of live agritourism records") }
+        Pill("● Live records", Color(0xFFDCFCE7), Color(0xFF166534))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        StatCard("Total Users", money(s.db.userCount()), "Registered accounts", Color(0xFFE0F2FE), Modifier.weight(1f))
+        StatCard("Total Users", money(s.db.userCount()), "${s.userAccounts.count { it.isActive }} active accounts", Color(0xFFE0F2FE), Modifier.weight(1f))
         StatCard("Total Farms", money(s.farmers.size), "${s.tours.size} tours · ${s.fruitPicking.size} orchards", Color(0xFFE3F1E7), Modifier.weight(1f))
-        StatCard("Total Bookings", money(s.bookings.size), "%.1f%% fulfillment rate".format(s.fulfillmentRate), Color(0xFFFEF3E2), Modifier.weight(1f)) { s.navigate(Page.MY_BOOKINGS) }
+        StatCard("Total Bookings", money(s.bookings.size), "%.1f%% fulfillment rate".format(s.fulfillmentRate), Color(0xFFFEF3E2), Modifier.weight(1f))
         StatCard("Total Products", money(s.products.size), "${s.products.count { it.stock > 0 }} in stock", Color(0xFFEDE9FE), Modifier.weight(1f))
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-        GlassCard(Modifier.weight(1.6f)) {
-            SectionHeader("Bookings Overview", "Monthly reservations by tour date (last 6 months)") {
-                TextButton({ s.navigate(Page.MY_BOOKINGS) }) { Text("View Reports", fontWeight = FontWeight.Bold) }
-            }
-            Spacer(Modifier.height(12.dp))
-            DataChart(s.monthlyBookings, Palette.Teal, Color(0xFF14B8A6), Modifier.fillMaxWidth().height(260.dp)) { v ->
-                if (v == Math.floor(v)) money(v) else "%.1f".format(v)
-            }
-            TextButton({ s.navigate(Page.MY_BOOKINGS) }, Modifier.align(Alignment.End)) { Text("View All Bookings Table →", fontWeight = FontWeight.Bold) }
-        }
-        GlassCard(Modifier.weight(1f)) {
-            H2("Recent Activities")
-            Spacer(Modifier.height(12.dp))
-            if (s.notifications.isEmpty()) Sub("No recent activity.")
-            s.notifications.take(4).map { n ->
-                Triple(when (n.type) { "farmer_order", "market" -> Icons.Outlined.Description; "booking", "farmer_booking_alert" -> Icons.Outlined.EventAvailable; else -> Icons.Outlined.Person },
-                    n.title, n.desc) to n.time
-            }.forEach { (t, time) ->
-                Row(Modifier.padding(vertical = 10.dp)) {
-                    Box(Modifier.size(40.dp).clip(CircleShape).background(Palette.Mint), contentAlignment = Alignment.Center) { Icon(t.first, null, tint = Palette.Forest) }
-                    Spacer(Modifier.width(12.dp))
-                    Column { Text(t.second, fontWeight = FontWeight.Bold, fontSize = 14.sp); Sub(t.third); Text(time, fontSize = 11.sp, color = Palette.Muted) }
-                }
-            }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+        SectionHeader("Bookings Overview", "Monthly reservations by tour date, calculated live from the bookings table")
+        DataChart(s.monthlyBookings, Palette.Teal, Color(0xFF14B8A6), Modifier.fillMaxWidth().height(260.dp)) { v ->
+            if (v == Math.floor(v)) money(v) else "%.1f".format(v)
         }
     }
-    GlassCard {
-        SectionHeader("Partner Farmers", "Click a photo to change it")
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-            s.farmers.forEach { f ->
-                Column(Modifier.width(120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    EditableAvatar(f.photoUrl, 72.dp) { pickImageFile("Choose photo for ${f.name}")?.let { s.changeFarmerPhoto(f.id, it) } }
-                    Spacer(Modifier.height(6.dp))
-                    Text(f.name, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(f.farmName, fontSize = 10.sp, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    GlassCard(Modifier.fillMaxWidth()) {
+        SectionHeader("Registered Users Over Time", "Cumulative account counts from users.created_at; missing legacy dates are excluded")
+        DataChart(s.registeredUsersOverTime, Palette.Forest, Color(0xFF16A34A), Modifier.fillMaxWidth().height(220.dp)) { money(it) }
+        val missingDates = s.userAccounts.count { it.createdAt.isBlank() }
+        if (missingDates > 0) Sub("$missingDates existing account(s) have no recorded creation date; total users above still includes them.")
+    }
+
+    AdminAccountManagement(s)
+    DashboardAccountFooter(s)
+}
+
+private fun farmLocationText(farm: ph.agritourism.model.FarmerProfile?): String =
+    farm?.let { listOf(it.location, it.province).filter { part -> part.isNotBlank() }.joinToString(", ") }.orEmpty().ifBlank { "—" }
+
+private fun farmerNameFor(s: AppState, farmerId: Int?, fallback: String): String {
+    val farm = s.farmers.firstOrNull { it.id == farmerId }
+    return fallback.ifBlank {
+        s.userAccounts.firstOrNull { it.farmerId == farmerId && it.role == Role.FARMER }?.fullName
+            ?: farm?.name.orEmpty()
+    }.ifBlank { "—" }
+}
+
+private fun ratingText(rating: Double, reviews: Int): String =
+    if (reviews > 0 && rating > 0) "%.1f (%d reviews)".format(rating, reviews) else "No Ratings"
+
+private fun statusText(archived: Boolean): String = if (archived) "Archived" else "Active"
+
+@Composable
+fun AdminToursPage(s: AppState) {
+    LaunchedEffect(s.activePage) { s.refreshFromDb() }
+    H1("Tour")
+    Sub("Read-only text table of farm tours and activities")
+    AdminReadOnlyTable(
+        title = "Tours",
+        subtitle = "Farm tours and activities with live ratings and status",
+        headers = listOf("Tour Name", "Farmer Name", "Farm Name", "Farm Location", "Description", "Availability", "Ratings", "Status"),
+        rows = s.allTours.map { tour ->
+            val farm = s.farmers.firstOrNull { it.id == tour.farmerId }
+            listOf(
+                tour.name,
+                farmerNameFor(s, tour.farmerId, tour.farmerName),
+                farm?.farmName ?: "Platform-managed",
+                farmLocationText(farm).takeIf { it != "—" } ?: tour.location,
+                tour.description,
+                if (tour.bookingEnabled) "Available" else "Unavailable",
+                ratingText(tour.rating, tour.reviewsCount),
+                statusText(tour.archived),
+            )
+        },
+    )
+    DashboardAccountFooter(s)
+}
+
+@Composable
+fun AdminFruitPickingPage(s: AppState) {
+    LaunchedEffect(s.activePage) { s.refreshFromDb() }
+    H1("Fruit Picking")
+    Sub("Read-only text table of fruit-picking activities")
+    AdminReadOnlyTable(
+        title = "Fruit Picking Activities",
+        subtitle = "Orchard harvest experiences with live ratings and status",
+        headers = listOf("Activity Name", "Farmer Name", "Farm Name", "Farm Location", "Description", "Availability", "Ratings", "Status"),
+        rows = s.allOrchards.map { item ->
+            val farm = s.farmers.firstOrNull { it.id == item.farmerId }
+            listOf(
+                item.title,
+                farmerNameFor(s, item.farmerId, ""),
+                item.farmName.ifBlank { farm?.farmName ?: "Platform-managed" },
+                farmLocationText(farm).takeIf { it != "—" } ?: item.location,
+                item.description,
+                item.seasonAvailability.ifBlank { "Not specified" },
+                ratingText(item.rating, item.reviewsCount),
+                statusText(item.archived),
+            )
+        },
+    )
+    DashboardAccountFooter(s)
+}
+
+@Composable
+fun AdminProductsPage(s: AppState) {
+    LaunchedEffect(s.activePage) { s.refreshFromDb() }
+    H1("Products")
+    Sub("Read-only text table of vegetables and harvest products")
+    AdminReadOnlyTable(
+        title = "Vegetables and Products",
+        subtitle = "Marketplace produce with live price, stock, ratings and status",
+        headers = listOf("Product Name", "Farmer Name", "Farm Name", "Farm Location", "Description", "Price", "Stock / Availability", "Ratings", "Status"),
+        rows = s.allProducts.map { product ->
+            val farm = s.farmers.firstOrNull { it.id == product.farmerId }
+            listOf(
+                product.name,
+                farmerNameFor(s, product.farmerId, ""),
+                farm?.farmName ?: product.farmOrigin,
+                farmLocationText(farm),
+                product.description,
+                "$PESO${money(product.price)} / ${product.unit}",
+                if (product.stock > 0) "${product.stock} in stock" else "Out of Stock",
+                ratingText(product.rating, product.reviewsCount),
+                statusText(product.archived),
+            )
+        },
+    )
+    DashboardAccountFooter(s)
+}
+
+@Composable
+private fun AdminReadOnlyTable(title: String, subtitle: String, headers: List<String>, rows: List<List<String>>) {
+    GlassCard(Modifier.fillMaxWidth()) {
+        SectionHeader(title, subtitle) { Pill("${rows.size} records", Palette.Mint, Palette.Forest) }
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.Mint).padding(horizontal = 10.dp, vertical = 12.dp)) {
+            headers.forEach { Text(it, Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep) }
+        }
+        if (rows.isEmpty()) Sub("No active records found.")
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp)) {
+                row.forEach { value ->
+                    Text(value.ifBlank { "—" }, Modifier.weight(1f).padding(end = 8.dp), fontSize = 12.sp,
+                        color = Palette.Ink, maxLines = 4, overflow = TextOverflow.Ellipsis)
                 }
             }
+            HorizontalDivider(color = Palette.Border)
         }
     }
 }
@@ -182,63 +282,105 @@ fun FarmerDashboard(s: AppState) {
         StatCard("Active Bookings", "${s.activeBookings.size}", "Upcoming farm visitors", Color(0xFFFCEBD6), Modifier.weight(1f)) { s.navigate(Page.MY_BOOKINGS) }
     }
     GlassCard {
-        SectionHeader("Farm Sales & Revenue Graph", "Monthly produce orders + tour booking revenue (PHP, last 6 months)") { Pill("Total: $PESO${money(s.totalRevenue)}") }
+        SectionHeader("Farm Sales & Revenue Graph", "Monthly produce orders and booking revenue (PHP, last 6 months)") { Pill("Total: $PESO${money(s.totalRevenue)}") }
         Spacer(Modifier.height(10.dp))
         DataChart(s.monthlyRevenue, Color(0xFF15803D), Color(0xFF16A34A), Modifier.fillMaxWidth().height(210.dp)) { v ->
             if (v >= 1000) "$PESO${"%.1f".format(v / 1000).removeSuffix(".0")}k" else "$PESO${money(v)}"
         }
     }
+    FarmerBookingTable(s, "Tour Bookings", s.visibleBookings.filter { it.activityType == "tour" })
+    FarmerBookingTable(s, "Fruit Picking Bookings", s.visibleBookings.filter { it.activityType == "orchard" })
+    DashboardAccountFooter(s)
+}
+
+@Composable
+private fun FarmerBookingTable(s: AppState, title: String, bookings: List<ph.agritourism.model.Booking>) {
     GlassCard {
-        SectionHeader("Recent Tour Bookings", "Accept or manage visitor requests for ${s.myFarmLabel}") {
-            Pill("${s.visibleBookings.count { it.status == "Pending" }} Pending Requests", Color(0xFFFEF3C7), Color(0xFF92400E))
+        SectionHeader(title, "Reservations for ${s.myFarmLabel}; select a row to open its dossier") {
+            Pill("${bookings.count { it.status == "Pending" }} Pending", Color(0xFFFEF3C7), Color(0xFF92400E))
         }
         Spacer(Modifier.height(12.dp))
-        val headers = listOf("Date" to 1.1f, "Time" to 1.3f, "Tourist Guest" to 1.3f, "Activity" to 1.5f, "Guests" to 0.8f, "1-Day Confirmation" to 1f, "Amount" to 0.7f, "Status" to 0.9f, "Action" to 1.3f)
-        Row(Modifier.fillMaxWidth().background(Palette.Mint, RoundedCornerShape(10.dp)).padding(10.dp)) {
-            headers.forEach { (h, w) -> Text(h, Modifier.weight(w), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep) }
+        val headers = listOf("Date", "Time", "Guest", "Pax", "Amount", "Status")
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.Mint).padding(10.dp)) {
+            headers.forEach { Text(it, Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep) }
         }
-        if (s.visibleBookings.isEmpty()) Sub("No bookings for your farm yet.")
-        s.visibleBookings.forEach { b ->
-            Row(Modifier.fillMaxWidth().clickable { s.selectedBookingForView = b }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(b.tourDate, Modifier.weight(1.1f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(b.tourTime, Modifier.weight(1.3f), fontSize = 12.sp, maxLines = 2)
-                Column(Modifier.weight(1.3f)) { Text(b.customerName, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(b.customerPhone ?: "—", fontSize = 10.sp, color = Palette.Muted) }
-                Text(b.activity, Modifier.weight(1.5f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${b.participants} ${if (b.participants == 1) "person" else "persons"}", Modifier.weight(0.8f), fontSize = 12.sp)
-                Box(Modifier.weight(1f)) {
-                    Pill(when (b.attendanceStatus) { "Arrived & Checked In" -> "Checked In"; "Confirmed Attending" -> "Attending"; "Cancelled by Tourist" -> "Cancelled"; else -> "Pending Check" })
-                }
-                Text("$PESO${money(b.totalAmount)}", Modifier.weight(0.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Box(Modifier.weight(0.9f)) { StatusPill(b.status) }
-                Row(Modifier.weight(1.3f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (b.status == "Pending") {
-                        PrimaryButton("Accept") { s.bookingAction(b.id, "Confirmed") }
-                        SecondaryButton("Decline", color = Palette.Red) { s.bookingAction(b.id, "Cancelled") }
-                    } else SecondaryButton("View", icon = Icons.Outlined.Visibility) { s.selectedBookingForView = b }
-                }
+        if (bookings.isEmpty()) Sub("No $title records yet.")
+        bookings.forEach { b ->
+            Row(Modifier.fillMaxWidth().handCursor().clickable { s.selectedBookingForView = b }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(b.tourDate, Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(b.tourTime, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2)
+                Text(b.customerName, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2)
+                Text("${b.participants}", Modifier.weight(1f), fontSize = 12.sp)
+                Text("$PESO${money(b.totalAmount)}", Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.weight(1f)) { StatusPill(b.status) }
             }
             HorizontalDivider(color = Palette.Border)
         }
     }
-    GlassCard {
-        SectionHeader("My Farm Products") { TextButton({ s.navigate(Page.FARMER_PRODUCTS) }) { Text("View All in Catalog →", fontWeight = FontWeight.Bold) } }
+}
+
+private const val FARMER_DELETE_MESSAGE =
+    "Deleting this Farmer account will also permanently remove the associated farm information, products, produce, tours, fruit-picking listings, schedules, and other related active data. Historical transaction records may be retained when necessary."
+
+@Composable
+private fun AdminAccountManagement(s: AppState) {
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("All") }
+    val accounts = s.userAccounts.filter { account ->
+        val roleMatches = account.role != Role.ADMIN && (filter == "All" ||
+            (filter == "Farmers" && account.role == Role.FARMER) ||
+            (filter == "Tourists" && account.role == Role.USER))
+        roleMatches && (query.isBlank() || account.fullName.contains(query, true) || account.email.contains(query, true))
+    }
+    GlassCard(Modifier.fillMaxWidth()) {
+        SectionHeader(
+            "User Information",
+            "Farmer and Tourist accounts only. Administrator records are read-only and cannot be deleted here.",
+        ) {
+            SecondaryButton("Refresh List", icon = Icons.Outlined.Refresh) { s.refreshFromDb() }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SearchField(query, { query = it }, "Search accounts…", Modifier.weight(1f))
+            FilterChipRow(listOf("All", "Farmers", "Tourists"), filter, { it }) { filter = it }
+        }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            s.farmProducts.take(4).zip(listOf(
-                Icons.Outlined.AutoAwesome to Color(0xFFFDE68A), Icons.Outlined.EmojiEvents to Color(0xFFF5DEB3),
-                Icons.Outlined.Agriculture to Color(0xFFBBF7D0), Icons.Outlined.WaterDrop to Color(0xFFFCD9A8),
-            )).map { (pr, ic) -> Triple(pr.name, "$PESO${money(pr.discountedPrice)} ${pr.unit}", ic.first) to ic.second }.forEach { (p, c) ->
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).border(1.dp, Palette.Border, RoundedCornerShape(16.dp))) {
-                    Box(Modifier.fillMaxWidth().height(80.dp).background(Brush.linearGradient(listOf(c, c.copy(alpha = 0.5f)))), contentAlignment = Alignment.Center) {
-                        Icon(p.third, null, Modifier.size(34.dp), tint = Palette.Deep)
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Palette.Mint).padding(horizontal = 10.dp, vertical = 12.dp)) {
+            listOf("Name", "Email", "Phone Number", "Location", "Role", "Status").forEach {
+                Text(it, Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+            }
+            Spacer(Modifier.width(92.dp))
+        }
+        if (accounts.isEmpty()) Sub("No Farmer or Tourist accounts match this filter.")
+        accounts.forEach { account -> AdminUserRow(s, account) }
+    }
+}
+
+@Composable
+private fun AdminUserRow(s: AppState, account: User) {
+    var error by remember(account.id) { mutableStateOf<String?>(null) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp).testTag("account-row-${account.id}"), verticalAlignment = Alignment.CenterVertically) {
+        Text(account.fullName, Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Palette.Deep, maxLines = 2)
+        Text(account.email, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2)
+        Text(account.phone.ifBlank { "Not Provided" }, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2)
+        Text(account.address.ifBlank { "—" }, Modifier.weight(1f), fontSize = 12.sp, maxLines = 2)
+        Text(if (account.role == Role.FARMER) "Farmer" else "Tourist", Modifier.weight(1f), fontSize = 12.sp)
+        Text(if (account.isActive) "Active" else "Inactive", Modifier.weight(1f), fontSize = 12.sp)
+        Box(Modifier.width(92.dp), contentAlignment = Alignment.CenterEnd) {
+            SecondaryButton("Delete", color = Palette.Red) {
+                if (account.role == Role.FARMER) {
+                    s.confirm("Delete Farmer Account?", FARMER_DELETE_MESSAGE, "Delete Account", "Cancel") {
+                        error = s.deleteFarmerAccount(account.id)
                     }
-                    Column(Modifier.background(Color.White).fillMaxWidth().padding(12.dp)) {
-                        Text(p.first, fontWeight = FontWeight.Bold); Text(p.second, fontSize = 12.sp, color = Palette.Forest)
+                } else {
+                    s.confirm("Delete Tourist Account?", "This permanently removes this tourist account. Historical bookings and orders are retained when required.", "Delete Account", "Cancel") {
+                        error = s.deleteTouristAccount(account.id)
                     }
                 }
             }
         }
     }
+    ErrorBanner(error)
+    HorizontalDivider(color = Palette.Border)
 }
 
 @Composable
@@ -293,7 +435,10 @@ fun TouristDashboard(s: AppState) {
             if (pending > 0) s.navigate(Page.MY_BOOKINGS)
         }
         MiniStat(Icons.Outlined.FavoriteBorder, "${favs.size}", "Wishlisted Farms", Modifier.weight(1f)) {
-            s.showToast(if (favs.isEmpty()) "No farms wishlisted yet. Tap the heart on a farm to save it." else "${favs.size} farm(s) wishlisted: ${favs.joinToString()}.")
+            s.navigate(Page.WISHLIST)
+        }
+        MiniStat(Icons.Outlined.ShoppingBag, "${s.visibleOrders.size}", "My Purchases", Modifier.weight(1f)) {
+            s.navigate(Page.MY_PURCHASES)
         }
     }
     Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(24.dp))) {
@@ -307,10 +452,20 @@ fun TouristDashboard(s: AppState) {
             PrimaryButton("Explore Tours Now", color = Color(0xFF22C55E)) { s.navigate(Page.FARM_DETAIL) }
         }
     }
-    SectionHeader("Popular Destinations") { TextButton({ s.navigate(Page.FARM_DETAIL) }) { Text("View All Farms →", fontWeight = FontWeight.Bold) } }
-    Grid(s.tours.take(3), 3) { t ->
-        PhotoCard(t.imageUrl, t.name, t.location.substringBefore(","), t.rating, t.reviewsCount, t.pricePerPerson, t.id.toLong() in s.favoriteIds,
-            { s.toggleFavorite(t.id.toLong(), t.name) }) { s.selectedTour = t; s.isTourModalOpen = true }
+    CatalogHome(s)
+    DashboardAccountFooter(s)
+}
+
+@Composable
+private fun DashboardAccountFooter(s: AppState) {
+    HorizontalDivider(color = Palette.Border)
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Avatar(s.avatar, 40.dp)
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text("Signed in as ${s.displayName}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Palette.Deep)
+            Text(s.userEmail, fontSize = 11.sp, color = Palette.Muted)
+        }
     }
 }
 

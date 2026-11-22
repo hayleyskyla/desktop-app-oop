@@ -32,9 +32,7 @@ internal fun CatalogPreviewModal(s: AppState, p: CatalogPreview) {
         Box(Modifier.fillMaxWidth().height(320.dp)) {
             AsyncImage(p.image, Modifier.fillMaxSize(), contentDescription = p.title)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B2512)))))
-            IconButton(close, Modifier.align(Alignment.TopEnd).padding(10.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.9f)).handCursor()) {
-                Icon(Icons.Filled.Close, "Close")
-            }
+            TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep) { close() }
             Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Pill(p.tag, Color.White.copy(alpha = 0.92f), Palette.Deep)
                 Spacer(Modifier.height(6.dp))
@@ -52,10 +50,10 @@ internal fun CatalogPreviewModal(s: AppState, p: CatalogPreview) {
             if (!s.isLoggedIn) {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Palette.Mint).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Log in or sign up to book, buy and explore more.", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Palette.Deep)
-                    PrimaryButton("Go to Login Page", icon = Icons.AutoMirrored.Outlined.Login) { close(); s.navigate(Page.LOGIN) }
+                    PrimaryButton("Explore More", icon = Icons.AutoMirrored.Outlined.Login) { close(); s.navigate(Page.LOGIN) }
                 }
             }
-            SecondaryButton("Close") { close() }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { TextAction("Close") { close() } }
         }
     }
 }
@@ -70,23 +68,42 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
     val close = {
         if (orchard) { s.isAddOrchardModalOpen = false; s.editingOrchard = null } else { s.isAddTourModalOpen = false; s.editingTour = null }
     }
-    val farm = s.myFarm
+    var ownerId by remember(tour?.id, orchardItem?.id) {
+        mutableStateOf(tour?.farmerId ?: orchardItem?.farmerId ?: s.adminListingFarmId)
+    }
+    val farm = if (s.isAdmin) s.farmers.firstOrNull { it.id == ownerId } else s.myFarm
     var name by remember { mutableStateOf(tour?.name ?: orchardItem?.title ?: "") }
     var price by remember { mutableStateOf((tour?.pricePerPerson ?: orchardItem?.pricePerPerson)?.toString() ?: "") }
     var desc by remember { mutableStateOf(tour?.description ?: orchardItem?.description ?: "") }
     var image by remember { mutableStateOf(tour?.imageUrl ?: orchardItem?.imageUrl ?: farm?.farmBannerUrl.orEmpty()) }
+    var location by remember { mutableStateOf(tour?.location ?: orchardItem?.location ?: farm?.location.orEmpty()) }
     var slot by remember { mutableStateOf("08:00 AM") }
     var hours by remember { mutableStateOf(tour?.operatingHours ?: "8:00 AM - 5:00 PM") }
     var activities by remember { mutableStateOf(tour?.activities?.joinToString() ?: "") }
+    var experienceType by remember { mutableStateOf(tour?.experienceType ?: "tour") }
+    var amenities by remember { mutableStateOf(tour?.amenities?.joinToString() ?: "") }
+    var estimatedDuration by remember { mutableStateOf(tour?.estimatedDuration ?: "") }
     var fruit by remember { mutableStateOf(orchardItem?.fruitName ?: "") }
     var duration by remember { mutableStateOf(orchardItem?.duration ?: "2 hours") }
     var season by remember { mutableStateOf(orchardItem?.seasonAvailability ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
     Modal(close, 640.dp) {
         ModalHeader((if (editing) "Edit " else "Add ") + if (orchard) "Fruit Picking Experience" else "Farm Tour",
-            if (editing) "Changes show in the catalog right away" else "Listed under ${farm?.farmName ?: "your farm"}",
+            if (editing) "Changes show in the catalog right away" else "Listed under ${farm?.farmName ?: "the selected farm"}",
             if (editing) Icons.Outlined.Edit else if (orchard) Icons.Outlined.AutoAwesome else Icons.Outlined.Explore, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (s.isAdmin && s.farmers.isNotEmpty()) {
+                val farmIds = s.farmers.map { it.id }
+                Dropdown("Farm Owner", listOf(0) + farmIds, ownerId?.takeIf { it == 0 || it in farmIds } ?: 0,
+                    { id -> if (id == 0) "Select a farm" else s.farmers.first { it.id == id }.farmName }) {
+                    ownerId = it
+                    s.adminListingFarmId = it
+                    s.farmers.firstOrNull { farm -> farm.id == it }?.let { selected ->
+                        location = selected.location
+                        if (image.isBlank()) image = selected.farmBannerUrl
+                    }
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AsyncImage(image, Modifier.size(width = 160.dp, height = 110.dp).clip(RoundedCornerShape(14.dp)), contentDescription = "Cover photo")
                 Spacer(Modifier.width(14.dp))
@@ -100,6 +117,7 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
             }
             Field(if (orchard) "Experience Name" else "Tour Name", name, { name = it }, Modifier.fillMaxWidth(),
                 if (orchard) "e.g. Sweet Mango Picking" else "e.g. Sunrise Farm Walk")
+            Field("Location", location, { location = it }, Modifier.fillMaxWidth(), "Barangay, city/municipality, province")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Field("Price per Person (₱)", price, { v -> price = v.filter(Char::isDigit) }, Modifier.weight(1f), "e.g. 350", number = true)
                 if (!editing) Field("First Time Slot", slot, { slot = it }, Modifier.weight(1f), "08:00 AM - Morning Walk")
@@ -111,15 +129,24 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
                 }
                 Field("Season", season, { season = it }, Modifier.fillMaxWidth(), "e.g. March - June")
             } else {
+                Dropdown("Experience Type", listOf("tour", "other_activity"), experienceType,
+                    { if (it == "other_activity") "Other Farm Activity" else "Farm Tour" }) {
+                    experienceType = it
+                }
                 Field("Operating Hours", hours, { hours = it }, Modifier.fillMaxWidth(), "e.g. 8:00 AM - 5:00 PM")
                 Field("Activities (comma separated)", activities, { activities = it }, Modifier.fillMaxWidth(), "e.g. Rice planting, Carabao ride")
+                Field("Amenities (comma separated)", amenities, { amenities = it }, Modifier.fillMaxWidth(), "e.g. Parking, Restroom, Farm Cafe")
+                Field("Estimated Duration", estimatedDuration, { estimatedDuration = it }, Modifier.fillMaxWidth(), "e.g. 3 hours")
             }
             Field("Description", desc, { desc = it }, Modifier.fillMaxWidth(), "What will visitors see and do?", singleLine = false, minLines = 3)
             Sub(if (editing) "Manage time slots under Guides & Time Slots." else "Add more time slots later under Guides & Time Slots.")
             ErrorBanner(error)
             PrimaryButton(if (editing) "Save Changes" else if (orchard) "Publish Fruit Picking" else "Publish Tour", Modifier.fillMaxWidth(),
                 if (editing) Icons.Outlined.Save else Icons.Outlined.Publish) {
-                val d = AppState.ActivityDraft(name, price, desc, image, slot, hours, activities, fruit, duration, season)
+                val d = AppState.ActivityDraft(
+                    name, price, desc, image, slot, hours, activities, fruit, duration, season,
+                    experienceType, location, ownerId, amenities, estimatedDuration,
+                )
                 error = when {
                     tour != null -> s.updateTour(tour.id, d)
                     orchardItem != null -> s.updateOrchard(orchardItem.id, d)
@@ -136,12 +163,12 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
 /** Edits the farm's short story (quote) and description shown to tourists. */
 @Composable
 internal fun EditStoryModal(s: AppState, f: FarmerProfile) {
-    val close = { s.isEditStoryOpen = false }
+    val close = { s.isEditStoryOpen = false; s.editingFarmerStory = null }
     var story by remember { mutableStateOf(f.storyQuote) }
     var desc by remember { mutableStateOf(f.fullBiography) }
     var error by remember { mutableStateOf<String?>(null) }
     Modal(close, 620.dp) {
-        ModalHeader("Edit Farm Story", "Shown on your profile, Farmers & Stories and the login page", Icons.Outlined.Edit, close)
+        ModalHeader("Edit Farm Story", "Show on Your Profile", Icons.Outlined.Edit, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Field("Short Story", story, { story = it }, Modifier.fillMaxWidth(), "One or two sentences about why you farm", singleLine = false, minLines = 2)
             Text("${story.trim().length}/280", fontSize = 11.sp, color = if (story.trim().length > 280) Palette.Red else Palette.Muted)

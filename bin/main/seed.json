@@ -1,0 +1,1767 @@
+{
+ "farmers": [
+  {
+   "id": 1,
+   "name": "Mang Juan Dela Cruz",
+   "roleTitle": "Master Pomologist & Agro-Steward",
+   "farmName": "Sunnyvale Farm & Honeycomb Sanctuary",
+   "location": "Bauan & San Jose, Batangas",
+   "province": "Batangas",
+   "yearsExperience": 40,
+   "photoUrl": "res:farmers/Juan.png",
+   "farmBannerUrl": "res:images/photo-1597848212624-a19eb35e2651-w1000.jpg",
+   "storyQuote": "Ang tunay na yaman ng lupa ay hindi lamang sa dami ng ani, kundi sa pag-aalaga sa kalikasan para sa susunod na henerasyon ng kabataang Pilipino.",
+   "fullBiography": "Nagsimula si Mang Juan noong 1984 sa 2-ektaryang taniman ng kape at lansones sa paanan ng Mount Maculot. Sa apat na dekadang pagtitiyaga, pinangunahan niya ang paggamit ng vermiculture, rainwater retention canals, at natural bee pollinator sanctuaries. Ngayon, nagbibigay ang Sunnyvale Farm ng regular na kabuhayan sa higit 24 na pamilyang magsasaka at tumatanggap ng mga eco-tourists upang ituro ang tunay na diwa ng Batangueño farming.",
+   "farmingPhilosophy": "Regenerative soil stewardship: feed the microorganisms first, and the soil will feed the community abundantly without chemicals.",
+   "certifications": [
+    "Bureau of Plant Industry GAP Certified",
+    "Organic Soil Conservation Steward",
+    "CALABARZON Eco-Farm of the Year"
+   ],
+   "sustainablePractices": [
+    "Zero Synthetic Pesticides",
+    "Rainwater Harvesting Reservoirs",
+    "Native Stingless Bee Pollination",
+    "Vermicompost Soil Enrichment"
+   ],
+   "specialtyProduce": [
+    "Carabao Mangoes",
+    "Native Ampalaya",
+    "Wildflower Honey",
+    "Saba Bananas"
+   ],
+   "productIds": [
+    101,
+    103,
+    106,
+    107,
+    109,
+    110
+   ],
+   "tourId": 1,
+   "rating": 4.9,
+   "reviewsCount": 148,
+   "generation": "3rd Generation Farmer",
+   "hectares": "8.5 Hectares",
+   "gallery": [
+    "res:images/photo-1597848212624-a19eb35e2651-w600.jpg",
+    "res:images/photo-1587049352851-8d4e89133924-w600.jpg",
+    "res:images/carabao_mango.jpg",
+    "res:images/photo-1464226184884-fa280b87c399-w400.jpg",
+    "res:fruit_picking/banana.jpg"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Nanay Elena Soriano",
+   "roleTitle": "Highland Organic Pioneer & Women Farmers Leader",
+   "farmName": "Benguet Berry Haven & Highland Mist Sanctuary",
+   "location": "La Trinidad & Tublay, Benguet",
+   "province": "Benguet",
+   "yearsExperience": 28,
+   "photoUrl": "res:farmers/Maria.png",
+   "farmBannerUrl": "res:images/photo-1464965911861-746a04b4bca6-w1200.jpg",
+   "storyQuote": "Sa bawat umagang nababalot ng hamog ang La Trinidad, bawat punla ng strawberry at kape ay inaalagaan naming parang sariling anak nang walang nakalalasong kemikal.",
+   "fullBiography": "Tubong Benguet si Nanay Elena at namulat sa tradisyunal na pagtatanim sa bulubundukin ng Cordillera. Noong dekada 90, pinasimulan niya ang pag-aalis ng mga kemikal na pestisidyo pabor sa pine needle composting at botanical sprays. Bilang pangulo ng La Trinidad Women Agrarian Cooperative, matagumpay niyang ikinonekta ang mga turista at direct consumers sa kanilang aning strawberry at kape, kaya napanatili ang patas na presyo para sa kababaihang magsasaka.",
+   "farmingPhilosophy": "High-altitude organic balance: working in harmony with mountain fog, spring waters, and ancestral terracing wisdom.",
+   "certifications": [
+    "Benguet Agro-Ecological Seal",
+    "Cordillera Organic Agriculture Guild",
+    "Fair Trade Women Champion"
+   ],
+   "sustainablePractices": [
+    "Mountain Spring Water Irrigation",
+    "Pine Needle Soil Bed Mulching",
+    "Companion Planting with Wild Mint",
+    "Heirloom Strawberry Seed Bank"
+   ],
+   "specialtyProduce": [
+    "Sweet Red Strawberries",
+    "Crisp Baguio Lettuce",
+    "Sweet Carrots & Broccoli"
+   ],
+   "productIds": [
+    102,
+    105,
+    108
+   ],
+   "tourId": 4,
+   "rating": 5.0,
+   "reviewsCount": 162,
+   "generation": "2nd Generation Highland Steward",
+   "hectares": "4.2 Hectares",
+   "gallery": [
+    "res:images/photo-1464965911861-746a04b4bca6-w600.jpg",
+    "res:images/photo-1622206151226-18ca2c9ab4a1-w600.jpg",
+    "res:images/photo-1598170845058-32b9d6a5da37-w600.jpg",
+    "res:images/photo-1615485290382-441e4d049cb5-w600.jpg",
+    "res:fruit_picking/grapes.jpg"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Mang Rigor Rodriguez",
+   "roleTitle": "Veteran Mango Arborist & Heirloom Seed Steward",
+   "farmName": "Batangas Heritage Mango & Rice Terraces",
+   "location": "San Juan & Rosario, Batangas",
+   "province": "Batangas",
+   "yearsExperience": 35,
+   "photoUrl": "res:farmers/Roberto.png",
+   "farmBannerUrl": "res:images/photo-1500382017468-9049fed747ef-w600.jpg",
+   "storyQuote": "Ang lupang ipinamana sa atin ng ating mga ninuno ay may sagradong tungkuling pakainin nang malinis at masustansya ang pamilyang Pilipino.",
+   "fullBiography": "Si Mang Rigor ay kilala sa buong Katagalugan sa pagpapanatili ng natural na paraan ng pamumunga ng manggang kalabaw nang hindi gumagamit ng calcium carbide o synthetic ripeners. Ang kanyang sakahan ay tahanan din ng mga heirloom na uri ng palay tulad ng Dinorado at Milagrosa. Tumatanggap siya ng mga mag-aaral ng agrikultura upang ituro ang sining ng tree grafting, organic seed storage, at rice field micro-ecosystems.",
+   "farmingPhilosophy": "Ancestral inheritance: trees that were planted by grandfathers must be preserved with devotion for great-grandchildren.",
+   "certifications": [
+    "Natural Farming Systems Philippines",
+    "Heirloom Variety Preservation Award",
+    "Batangas Master Agriculturist"
+   ],
+   "sustainablePractices": [
+    "Tree-Ripened Hand Harvesting",
+    "Botanical Smoke Pest Management",
+    "Fermented Plant Juice Nutrition",
+    "Free-Range Duck Rice Weeding"
+   ],
+   "specialtyProduce": [
+    "Carabao Mangoes",
+    "Plump Native Kamatis",
+    "Sitaw & Kalabasa",
+    "Banana Chips"
+   ],
+   "productIds": [
+    103,
+    104,
+    107,
+    110
+   ],
+   "tourId": 6,
+   "rating": 4.8,
+   "reviewsCount": 119,
+   "generation": "4th Generation Custodian",
+   "hectares": "11 Hectares",
+   "gallery": [
+    "res:images/photo-1592924357228-91a4daadcfea-w600.jpg",
+    "res:images/carabao_mango.jpg",
+    "res:images/squash_sitaw.jpg",
+    "res:images/photo-1528825871115-3581a5387919-w600.jpg",
+    "res:fruit_picking/kasoy.jpg",
+    "res:fruit_picking/pakwan.jpg",
+    "res:fruit_picking/kamoteng_kahoy.jpg"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Tatay Ramon Alcantara",
+   "roleTitle": "Plateau Watershed Custodian & Agroforester",
+   "farmName": "Bukidnon Highlands Eco-Orchard & Pine Valley",
+   "location": "Malaybalay & Manolo Fortich, Bukidnon",
+   "province": "Bukidnon",
+   "yearsExperience": 32,
+   "photoUrl": "res:farmers/Ricardo.png",
+   "farmBannerUrl": "res:images/photo-1550258987-190a2d41a8ba-w1200.jpg",
+   "storyQuote": "Ang bulkanikong lupa ng Bukidnon ay biyayang dapat pangalagaan. Sa bawat pinya at dragonfruit na inyong kinakain, sinusuportahan ninyo ang aming katutubong watershed.",
+   "fullBiography": "Lumaki si Tatay Ramon sa malawak na kapatagan ng Bukidnon kung saan nagtatagpo ang malamig na simoy ng bundok at matabang lupang bulkaniko. Nang makita ang pinsala ng soil erosion sa mga kalapit na bayan, sinimulan niya ang vetiver contour hedgerows at diversified agroforestry. Ngayon, ang kanyang plantasyon ay dinadayo ng mga turista na nagnanais maranasan ang pamimitas ng pinakamatamis na golden queen pineapples at pulang dragonfruit.",
+   "farmingPhilosophy": "Watershed-first agriculture: what happens in our mountain soils directly protects the rivers that sustain hundreds of towns below.",
+   "certifications": [
+    "Mindanao Watershed Protection Partner",
+    "Non-GMO Verified Agro-Hub",
+    "Rainforest Alliance Certified"
+   ],
+   "sustainablePractices": [
+    "Contour Vetiver Grass Bunds",
+    "Volcanic Mineral Soil Enrichment",
+    "Zero-Waste Fruit Pulp Biomass",
+    "Native Tree Shaded Borders"
+   ],
+   "specialtyProduce": [
+    "Golden Queen Pineapple",
+    "Red Pitaya Dragonfruit",
+    "Mountain Honey"
+   ],
+   "productIds": [
+    107,
+    109,
+    110
+   ],
+   "tourId": 5,
+   "rating": 4.9,
+   "reviewsCount": 135,
+   "generation": "3rd Generation Mindanao Farmer",
+   "hectares": "15 Hectares",
+   "gallery": [
+    "res:images/photo-1550258987-190a2d41a8ba-w600.jpg",
+    "res:fruit_picking/dragon_fruit.jpg",
+    "res:images/photo-1587049352851-8d4e89133924-w600.jpg",
+    "res:images/photo-1473448912268-2022ce9509d8-w400.jpg",
+    "res:fruit_picking/tamarind.jpg",
+    "res:fruit_picking/balingbing.jpg"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Ka Luming Mendoza",
+   "roleTitle": "Award-Winning Single-Origin Cacao Cultivator",
+   "farmName": "Davao Single-Origin Cacao & Tropical Agroforest",
+   "location": "Malagos & Calinan, Davao del Sur",
+   "province": "Davao",
+   "yearsExperience": 24,
+   "photoUrl": "res:farmers/Rosa.png",
+   "farmBannerUrl": "res:images/cacao_farm.jpg",
+   "storyQuote": "Ang tsokolate ng Pilipinas ay may world-class na sarap kung nagmumula sa minamahal at protektadong shaded agroforest.",
+   "fullBiography": "Si Ka Luming ay isa sa mga nangungunang babaeng tagapagtaguyod ng Philippine Criollo and Trinitario cacao. Sa kanyang 6-ektaryang sakahan sa paanan ng Mount Apo, ang mga puno ng cacao ay sumisilong sa ilalim ng matatayog na puno ng narra, saging, at mangosteen. Ang kanyang artisan tablea at single-origin chocolates ay umani ng pagkilala sa lokal at pandaigdigang eksena, at nagbibigay ng pangkabuhayang pagsasanay sa higit 30 kababaihan sa kanilang barangay.",
+   "farmingPhilosophy": "Canopy ecology: the greatest cocoa flavor comes from the complexity of living inside a true tropical forest.",
+   "certifications": [
+    "Philippine Cacao Excellence Gold Medalist",
+    "Rainforest Biodiversity Steward",
+    "Single-Origin Chocolate Guild"
+   ],
+   "sustainablePractices": [
+    "Multi-Story Agroforestry Canopy",
+    "Wooden Solar Fermentation Boxes",
+    "Banana-Leaf Curing Method",
+    "Zero Chemical Additives"
+   ],
+   "specialtyProduce": [
+    "Artisan Tablea Blocks",
+    "70% Dark Cacao Nibs",
+    "Purple Mangosteen"
+   ],
+   "productIds": [
+    101,
+    107,
+    109
+   ],
+   "tourId": 3,
+   "rating": 5.0,
+   "reviewsCount": 154,
+   "generation": "1st Generation Farm Founder",
+   "hectares": "6.0 Hectares",
+   "gallery": [
+    "res:images/tablea.jpg",
+    "res:images/cacao_farm.jpg",
+    "res:images/mangosteen.jpg",
+    "res:images/photo-1559056199-641a0ac8b55e-w600.jpg",
+    "res:fruit_picking/kamoteng_banging.jpg"
+   ]
+  }
+ ],
+ "tours": [
+  {
+   "id": 1,
+   "name": "Sunnyvale Farm Heritage Agro-Trail",
+   "location": "Bauan, Batangas",
+   "rating": 4.8,
+   "reviewsCount": 120,
+   "pricePerPerson": 200,
+   "operatingHours": "7:00 AM - 5:00 PM",
+   "amenities": [
+    "Restroom",
+    "Parking",
+    "Garden Cafe",
+    "Guides",
+    "Fast Wi-Fi"
+   ],
+   "activities": [
+    "Fruit Picking",
+    "Farm Tour",
+    "Cookout",
+    "Animal Feeding"
+   ],
+   "imageUrl": "res:images/photo-1589923188900-85dae523342b-w1000.jpg",
+   "description": "Tucked inside the fertile volcanic hills of Bauan, Sunnyvale Farm is a multi-generational eco-estate famous for ancient Lanzones, Rambutan, and Carabao mango groves. Visitors embark on peaceful shaded trails through 40-year-old fruit canopies, taste fresh coconut water harvested right before your eyes, and savor a traditional Batangueño farm lunch cooked over open wood fire.",
+   "highlightTag": "Trending Farm Tour",
+   "farmerName": "Mang Juan Dela Cruz",
+   "thumbnails": [
+    "res:images/photo-1464226184884-fa280b87c399-w400.jpg",
+    "res:images/photo-1601493700631-2b16ec4b4716-w400.jpg",
+    "res:fruit_picking/banana.jpg",
+    "res:images/photo-1500076656116-558758c991c1-w400.jpg"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Golden Sunflower & Honeycomb Sanctuary",
+   "location": "San Jose, Batangas",
+   "rating": 4.9,
+   "reviewsCount": 145,
+   "pricePerPerson": 250,
+   "operatingHours": "6:30 AM - 6:00 PM",
+   "amenities": [
+    "Sun Hats",
+    "Restroom",
+    "Photo Decks",
+    "Honey Pavilion",
+    "Parking"
+   ],
+   "activities": [
+    "Flower Photography",
+    "Beekeeping Demo",
+    "Honey Sampling",
+    "Pollinator Walk"
+   ],
+   "imageUrl": "res:images/photo-1597848212624-a19eb35e2651-w1000.jpg",
+   "description": "A breathtaking 6-hectare botanical sanctuary blanketed in over 50,000 golden blooming sunflowers. Designed as an educational haven for native pollinators and families, guests explore elevated bamboo walkways, interact with gentle stingless bees inside mesh observation huts, and sample pure raw comb honey with native herbal teas.",
+   "highlightTag": "Best for Photography",
+   "farmerName": "Aling Rosa Mendoza",
+   "thumbnails": [
+    "res:images/photo-1597848212624-a19eb35e2651-w400.jpg",
+    "res:images/photo-1587049352851-8d4e89133924-w600.jpg",
+    "res:images/photo-1500382017468-9049fed747ef-w400.jpg",
+    "res:images/photo-1500937386664-56d1dfef3854-w400.jpg"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Laurel Ridge Taal Overlook & Cacao Forest",
+   "location": "Laurel, Batangas",
+   "rating": 4.7,
+   "reviewsCount": 98,
+   "pricePerPerson": 280,
+   "operatingHours": "7:00 AM - 5:30 PM",
+   "amenities": [
+    "Taal Overlook Deck",
+    "Restroom",
+    "Rustic Cabins",
+    "Wi-Fi",
+    "Campfire"
+   ],
+   "activities": [
+    "Cacao Pod Harvesting",
+    "Tablea Making Class",
+    "Sunset Lounge",
+    "Dragonfruit Trek"
+   ],
+   "imageUrl": "res:images/cacao_farm.jpg",
+   "description": "Perched high along the cool ridges overlooking Taal Lake and volcanic hills, Laurel View Farm combines agro-forestry with artisanal chocolate craft. Walk through shaded cacao trees, harvest purple cacao pods, roast fermented beans in traditional copper skillets, and press your own organic tablea chocolate cake.",
+   "highlightTag": "Scenic Overlook",
+   "farmerName": "Elena Bautista",
+   "thumbnails": [
+    "res:images/cacao_farm.jpg",
+    "res:images/photo-1470071459604-3b5ec3a7fe05-w400.jpg",
+    "res:images/photo-1544965850-6f8a66788f9b-w400.jpg",
+    "res:images/tablea.jpg"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Banaue Ancestral Rice Terraces Cultural Trail",
+   "location": "Banaue, Benguet / Ifugao",
+   "rating": 4.9,
+   "reviewsCount": 76,
+   "pricePerPerson": 350,
+   "operatingHours": "6:00 AM - 4:00 PM",
+   "amenities": [
+    "Indigenous Guides",
+    "Cultural Center",
+    "Organic Mountain Cafe",
+    "Walking Sticks"
+   ],
+   "activities": [
+    "Terrace Wall Trekking",
+    "Heirloom Rice Planting",
+    "Weaving Demo",
+    "Native Hut Visit"
+   ],
+   "imageUrl": "res:images/photo-1500937386664-56d1dfef3854-w1000.jpg",
+   "description": "A monumental cultural expedition along 2,000-year-old stone terrace walls hand-built by ancient Cordillera tribes. Guided by native elder farmers, trekkers step along cascading water canals, learn the sacred cultivation rituals of heirloom Tinawon red rice, and witness traditional back-strap loom weaving.",
+   "highlightTag": "UNESCO Heritage",
+   "farmerName": "Lakay Dumangeng",
+   "thumbnails": [
+    "res:images/photo-1470071459604-3b5ec3a7fe05-w400.jpg",
+    "res:images/photo-1506744038136-46273834b3fb-w400.jpg",
+    "res:images/photo-1501785888041-af3ef285b470-w400.jpg",
+    "res:images/photo-1500382017468-9049fed747ef-w400.jpg"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Riverside Bamboo Agritrail & Waterway Haven",
+   "location": "Calauan, Laguna",
+   "rating": 4.7,
+   "reviewsCount": 87,
+   "pricePerPerson": 220,
+   "operatingHours": "6:00 AM - 5:30 PM",
+   "amenities": [
+    "Bamboo Rafts",
+    "Campsite",
+    "Restroom",
+    "Riverside Kiosks",
+    "Guides"
+   ],
+   "activities": [
+    "Bamboo Rafting",
+    "River Water Trek",
+    "Freshwater Fish Feeding",
+    "Citrus Gathering"
+   ],
+   "imageUrl": "res:images/photo-1473448912268-2022ce9509d8-w400.jpg",
+   "description": "Nestled along natural freshwater springs, this tranquil agro-park features floating bamboo bridges, lush riverbanks, and fragrant citrus canopies. Hop aboard bamboo balsa rafts, hand-feed native river carps, harvest fragrant Calamansi and Dalandan, and relax under giant bamboo clusters.",
+   "highlightTag": "River & Waters",
+   "farmerName": "Mang Nestor Ramos",
+   "thumbnails": [
+    "res:images/photo-1473448912268-2022ce9509d8-w400.jpg",
+    "res:images/photo-1448375240586-882707db888b-w400.jpg",
+    "res:images/photo-1501785888041-af3ef285b470-w400.jpg",
+    "res:images/photo-1544965850-6f8a66788f9b-w400.jpg"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Green Valley Herbal Sanctuary & Organic Farm",
+   "location": "Pampanga, Central Luzon",
+   "rating": 4.8,
+   "reviewsCount": 110,
+   "pricePerPerson": 240,
+   "operatingHours": "7:00 AM - 5:00 PM",
+   "amenities": [
+    "Herbal Tea Lounge",
+    "Restroom",
+    "Herb Drying Hut",
+    "Fast Wi-Fi",
+    "Parking"
+   ],
+   "activities": [
+    "Herbal Tea Blending",
+    "Organic Compost Workshop",
+    "Medicinal Herb Trail",
+    "Farm-to-Bowl Salad Making"
+   ],
+   "imageUrl": "res:images/photo-1540420773420-3366772f4999-w600.jpg",
+   "description": "An oasis of wellness and agro-ecology at the foot of Mount Arayat. Explore certified organic plots cultivating lemongrass, blue ternatea, gotu kola, and stevia. Hand-pick fresh herbs to blend your own artisan wellness tisanes and enjoy freshly harvested farm salads.",
+   "highlightTag": "Herbal & Wellness",
+   "farmerName": "Nanay Corazon Cruz",
+   "thumbnails": [
+    "res:images/photo-1596040033229-a9821ebd058d-w400.jpg",
+    "res:images/photo-1464226184884-fa280b87c399-w400.jpg",
+    "res:images/photo-1540420773420-3366772f4999-w400.jpg",
+    "res:images/photo-1598170845058-32b9d6a5da37-w600.jpg"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Bantug Lake Ranch",
+   "location": "Granada Alangilan Road, Bacolod City, Negros Occidental, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 350,
+   "operatingHours": "",
+   "amenities": ["Swimming pool", "Picnic facilities"],
+   "activities": ["Boating", "Fishing", "Swimming", "Horseback riding", "Vegetable picking", "Animal feeding"],
+   "imageUrl": "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/6aedcff040067ced2ee1b92b9924c586.jpg",
+   "description": "A lakeside ranch destination shown in the uploaded photos, with boats, landscaped grounds and picnic areas. The current official site lists boating, fishing, swimming, horseback riding, vegetable picking and animal feeding; confirm the exact location and which activities belong in this booking package before publishing.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/574b33d62d2b82869da373a707a6e89f.jpg",
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/82e2ff7e820bdeae1f558ca652cfadc6.jpg",
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/912d5117dec95b11151d2467dd97a7f0.jpg"
+   ],
+   "estimatedDuration": "Approx. 3 hours; confirm with the operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 350,
+   "priceSuggestionBasis": "ESTIMATE: the official site lists regular adult entry at PHP 75, entry plus swimming at PHP 150, and an All Access Pass at PHP 350 (entry, swimming, two horseback-riding rounds, fishing and boating), updated July 1, 2026. The app's PHP 350/person estimate references that pass but is not a verified AgriTourism tour rate; confirm package inclusions with the operator.",
+   "priceSuggestionSource": "https://bantuglakeranch.com/experiences/"
+  },
+  {
+   "id": 8,
+   "name": "Burnham Park",
+   "location": "Baguio City, Benguet, Cordillera Administrative Region, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 250,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Lakeside walk", "Park and garden viewing", "Boating (rental terms to confirm)"],
+   "imageUrl": "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/ba096562292ad3c4c1894012689183e0.jpg",
+   "description": "A scenic visit to Baguio's central urban park, with tree-lined paths and a man-made lake. The uploaded photos show the gardens and boats; this draft describes a park visit rather than a verified farm tour, and any boat hire or hosted itinerary must be confirmed before bookings open.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/7c21ac38b58ba2f388a7bdadf5e0f761.jpg",
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/d1380b6d4d7037a5a7641ee9b9207f2e.jpg",
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/e542515a25b0e60fe35997cffa4e304c.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm the visit scope",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 250,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 250/person for a short hosted park walk. No official guided-tour rate was verified; boat hire, other rides, food and transport are excluded unless separately confirmed. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 9,
+   "name": "Chocolate Hills",
+   "location": "Carmen, Bohol, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 300,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Viewpoint visit", "Landscape walk", "Photography"],
+   "imageUrl": "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/a9f6d1c2b6f5650af74ec97b6d34c18b.jpg",
+   "description": "A destination draft for viewing Bohol's distinctive rounded hills from the visitor complex. Uploaded images show the hill landscape, stairs and viewing paths; confirm the specific site, current access rules and any additional activities before enabling reservations.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/7011f03f4bce1fd094c72637c8727254.jpg",
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/94c31c0772c8304fe6bc3a4a9e1cd59f.jpg",
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/d9204591220a6fcb27780b095df8d141.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the site operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 300,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 300/person for a basic viewpoint visit and orientation. No official published package rate was verified; entrance, transport and optional activities must be checked. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 10,
+   "name": "Garin Farm",
+   "location": "San Joaquin, Iloilo, Western Visayas, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 350,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Farm and garden walk", "Scenic viewpoint visit", "Photography"],
+   "imageUrl": "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/0b00a0b6ba52e129b9d167133a393972.jpg",
+   "description": "A farm destination draft based on the uploaded landscaped grounds, garden paths and elevated viewpoints. The photos also include a religious-themed attraction; confirm which areas and activities are included in a visitor itinerary with the operator before accepting bookings.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/4e621e965a4fbc750f8aa5bc4cb3ee11.jpg",
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/50b77d0433e990db8b59f4035740d322 (1).jpg",
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/a6014441fe003dbb178827517d9bdbe7.jpg"
+   ],
+   "estimatedDuration": "Approx. 3 hours; confirm with the operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 350,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 350/person for a half-day farm-and-viewpoint visit. No official current rate or package inclusions were verified; confirm entrance, activities and separate fees with the operator. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 11,
+   "name": "Northern Blossom Flower Farm",
+   "location": "Atok, Benguet, Cordillera Administrative Region, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 250,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Seasonal flower viewing", "Garden walk", "Photography"],
+   "imageUrl": "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/25bb8e95aabc441adeaf1b4ab454b0e1.jpg",
+   "description": "A highland flower-farm draft featuring the terraced beds, colorful blooms and mountain scenery visible in the uploaded photographs. Flower availability is seasonal; confirm the current bloom calendar, visitor route and access rules with the farm before publishing a schedule.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/3a5aad9f3e179d77cc623b12c4afe90d.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/3cab1b78d059297fc794caed0242e3ac.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/a79be2173c9dba1941e9c32b55fa5ff2.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/d5f0be7cf36cfd1ca5458e1ff97cff22.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the farm",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 250,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 250/person for a garden visit and photography stop. No current official rate was verified; seasonal access and inclusions require confirmation. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 12,
+   "name": "Sagada Hanging Coffins",
+   "location": "Echo Valley, Sagada, Mountain Province, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 300,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Guided cultural walk", "Hanging-coffin site visit", "Photography subject to local protocols"],
+   "imageUrl": "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/cea622deb4e09fb41af9c3a4ba7ebe09.jpg",
+   "description": "A respectful cultural-site draft for the hanging-coffin landscape shown in the uploaded photos. Visitors should follow local community guidance and use an accredited local guide where required; confirm the route, current access rules and cultural protocols before scheduling.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/2060ab5b46b575e4742a3b4bf47ed9d8.jpg",
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/22346906fc0cce247ee00c343fd79309.jpg",
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/a6f07bb65bbe88f8f40156af1ed87019.jpg"
+   ],
+   "estimatedDuration": "Approx. 2-3 hours; confirm with the accredited guide",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 300,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 300/person for an assisted cultural walk. The official Tourism Office lists a separate PHP 100/person registration fee, but no current hanging-coffins guide/package rate was verified. Confirm the guide quote, registration handling and inclusions.",
+   "priceSuggestionSource": "https://tourism.sagada.gov.ph/"
+  },
+  {
+   "id": 13,
+   "name": "SVD Laudato Si' Farm",
+   "location": "Arnoldus Road, Barangay Maitim 2nd East, Tagaytay City, Cavite, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 200,
+   "operatingHours": "",
+   "amenities": ["Ecospirituality Center", "Chapel of the Virgin of the Poor", "Farm-to-table dining"],
+   "activities": ["Farm tour", "Vegetable garden visit", "Prayer and reflection"],
+   "imageUrl": "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/IMG_204aa98f-8547-4d21-a971-869ab6af068d.webp",
+   "description": "An ecotourism farm in Tagaytay focused on faith, farming and food. Its official visitor information confirms farm tours, vegetable-growing areas, an ecospirituality center, a chapel and farm-to-table dining. The farm says entry is free; confirm the tour itinerary and reservations with the host.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/792ad72a045fe2210e1364afcdf70a8d.jpg",
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/d2a56ade63dab760fa80a46540e5e2aa.jpg",
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/IMG_8e086f7c-d217-4c01-8f4e-4b566f739059.webp"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the host",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 200,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 200/person is a suggested farm-tour service price, not an admission fee. The official foundation page says entry is free, farm tours are offered, walk-ins are accepted, and groups of 10+ should reserve a week ahead. It lists Mon-Fri 7:00 AM-7:00 PM and Sat-Sun 7:00 AM-8:00 PM, but the current search listing shows different hours. Verify the current weekly schedule and tour charge with the farm before enabling bookings. Contact: 0905-106-5499 or contact@svdlaudatosifarmfoundation.org. Admin can edit the estimate.",
+   "priceSuggestionSource": "https://www.svdlaudatosifarmfoundation.org/2023/07/what-you-need-to-know-about-ussvd-farm.html"
+  }
+ ],
+ "fruitPicking": [
+  {
+   "id": 1,
+   "title": "Sweet Dalanghita & Valencia Orange Orchard Harvest",
+   "farmName": "Sunnyvale Farm",
+   "location": "Bauan, Batangas",
+   "fruitName": "Valencia & Dalanghita Oranges",
+   "pricePerPerson": 200,
+   "rating": 4.9,
+   "reviewsCount": 132,
+   "duration": "1 hour, 30 mins",
+   "seasonalFruits": "Oranges, Dalanghita, Calamansi",
+   "imageUrl": "res:images/photo-1611080626919-7cf5a9dbab5b-w1000.jpg",
+   "description": "Wander through sun-drenched Batangas citrus groves where low-hanging branches are heavy with sweet Valencia oranges and native green Dalanghita. Receive wooden harvest shears and a woven basket to pick the juiciest fruits directly off the tree with guidance from our veteran orchardists.",
+   "seasonAvailability": "Peak Season: October - May",
+   "thumbnails": [
+    "res:images/photo-1611080626919-7cf5a9dbab5b-w400.jpg",
+    "res:images/photo-1582979512210-99b6a53386f9-w400.jpg",
+    "res:images/photo-1587735243615-c03f25aaff15-w400.jpg",
+    "res:images/photo-1546548970-71785318a17b-w600.jpg"
+   ]
+  },
+  {
+   "id": 2,
+   "title": "Highland Sweet Strawberry Harvest Festival",
+   "farmName": "Benguet Berry Haven",
+   "location": "La Trinidad, Benguet",
+   "fruitName": "Benguet Sweet Red Strawberries",
+   "pricePerPerson": 220,
+   "rating": 4.9,
+   "reviewsCount": 160,
+   "duration": "1 hour, 45 mins",
+   "seasonalFruits": "Strawberries, Highland Blueberries",
+   "imageUrl": "res:fruit_picking/strawberry.jpg",
+   "description": "Experience the iconic highland morning harvest in the crisp, fog-kissed mountain air of La Trinidad. Handpick bright crimson, perfectly ripe strawberries straight from organic straw-mulched garden beds. Includes a woven keepsake basket and sample tasting of freshly stirred strawberry jam.",
+   "seasonAvailability": "Peak Season: November - April",
+   "thumbnails": [
+    "res:fruit_picking/strawberry.jpg",
+    "res:images/photo-1518635017498-87f514b751ba-w400.jpg",
+    "res:images/photo-1464965911861-746a04b4bca6-w400.jpg"
+   ]
+  },
+  {
+   "id": 3,
+   "title": "Golden Carabao Mango Tree-to-Basket Harvest",
+   "farmName": "Guimaras & Batangas Orchards",
+   "location": "Guimaras, Western Visayas",
+   "fruitName": "Carabao Mangoes (Sweet Grade A)",
+   "pricePerPerson": 250,
+   "rating": 4.8,
+   "reviewsCount": 115,
+   "duration": "1 hour, 30 mins",
+   "seasonalFruits": "Golden Carabao Mangoes, Pico",
+   "imageUrl": "res:images/carabao_mango.jpg",
+   "description": "Harvest the world's sweetest mangoes! Learn traditional bamboo pole harvesting (panungkit with woven cloth pouches) alongside multi-generation mango growers. Pick sun-ripened golden Carabao mangoes directly from 50-year-old heritage canopies with zero chemical carbide treatment.",
+   "seasonAvailability": "Peak Season: March - July",
+   "thumbnails": [
+    "res:images/mango_tree.jpg",
+    "res:images/photo-1601493700631-2b16ec4b4716-w400.jpg",
+    "res:images/photo-1553279768-865429fa0078-w600.jpg",
+    "res:images/carabao_mango.jpg"
+   ]
+  },
+  {
+   "id": 4,
+   "title": "Radiant Magenta Dragon Fruit & Passionfruit Trellis",
+   "farmName": "Laurel Ridge Farm",
+   "location": "Laurel, Batangas",
+   "fruitName": "Red & White Dragonfruit",
+   "pricePerPerson": 220,
+   "rating": 4.7,
+   "reviewsCount": 95,
+   "duration": "1 hour, 15 mins",
+   "seasonalFruits": "Dragon Fruit, Passion Fruit",
+   "imageUrl": "res:fruit_picking/dragon_fruit.jpg",
+   "description": "Stroll along towering concrete trellis rows laden with radiant magenta and snowy-white dragonfruits. Clip the ripe, spiny fruit directly from cactus pads with our protective gloves and shears, followed by a chilled glass of fresh dragonfruit-lime juice at the ridge overlook deck.",
+   "seasonAvailability": "Peak Season: June - November",
+   "thumbnails": [
+    "res:fruit_picking/dragon_fruit.jpg",
+    "res:images/dragon_fruit_plantation.jpg"
+   ]
+  },
+  {
+   "id": 5,
+   "title": "Sweet Rambutan & Lanzones Cluster Harvest",
+   "farmName": "Riverside Haven Farm",
+   "location": "Calauan, Laguna",
+   "fruitName": "Maharlika Rambutan & Paete Lanzones",
+   "pricePerPerson": 200,
+   "rating": 4.8,
+   "reviewsCount": 88,
+   "duration": "1 hour, 30 mins",
+   "seasonalFruits": "Rambutan, Lanzones, Santol",
+   "imageUrl": "res:fruit_picking/rambutan.jpg",
+   "description": "Step into shaded canopy groves where trees are bursting with bright red, hairy sweet Rambutan and translucent sweet Paete Lanzones clusters. Use wooden orchard steps to gently clip thick clusters right into your woven basket while sampling sweet, juicy pulp on the spot.",
+   "seasonAvailability": "Peak Season: August - November",
+   "thumbnails": [
+    "res:fruit_picking/rambutan.jpg",
+    "res:fruit_picking/lanzones.jpg"
+   ]
+  },
+  {
+   "id": 6,
+   "title": "Bountiful Golden Papaya & Guava Grove Harvest",
+   "farmName": "Silang Orchard Haven",
+   "location": "Silang, Cavite",
+   "fruitName": "Red Lady Papaya & Native Guava",
+   "pricePerPerson": 190,
+   "rating": 4.8,
+   "reviewsCount": 74,
+   "duration": "1 hour, 20 mins",
+   "seasonalFruits": "Papaya, Guava, Chico",
+   "imageUrl": "res:images/papaya_tree.jpg",
+   "description": "Experience the lush upland groves of Silang, Cavite. Pluck fragrant ripe Red Lady papayas and sweet pink guavas directly from gently sloping garden rows, accompanied by fresh fruit slices served with native chili-salt seasoning.",
+   "seasonAvailability": "Peak Season: Year-Round",
+   "thumbnails": [
+    "res:images/papaya_tree.jpg",
+    "res:images/photo-1617112848923-cc2234396a8d-w400.jpg"
+   ]
+  }
+ ],
+ "products": [
+  {
+   "id": 101,
+   "name": "Organic Ampalaya (Bitter Gourd)",
+   "category": "Vegetables",
+   "price": 90,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 35,
+   "rating": 4.8,
+   "reviewsCount": 22,
+   "imageUrl": "res:images/photo-1464226184884-fa280b87c399-w400.jpg",
+   "description": "Freshly harvested organic bitter gourd rich in natural charantin and iron. Crisp, firm, and pesticide-free from sunny Batangas fields.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 102,
+   "name": "Crisp Baguio Lettuce & Romaine",
+   "category": "Vegetables",
+   "price": 110,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 50,
+   "rating": 5.0,
+   "reviewsCount": 45,
+   "imageUrl": "res:images/photo-1622206151226-18ca2c9ab4a1-w600.jpg",
+   "description": "High-altitude crisp green lettuce cultivated in Benguet's cool mountain mist. Cleanly washed in mountain spring water.",
+   "farmOrigin": "Benguet Berry Haven (Benguet)"
+  },
+  {
+   "id": 103,
+   "name": "Plump Native Kamatis (Tomatoes)",
+   "category": "Vegetables",
+   "price": 70,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 60,
+   "rating": 4.7,
+   "reviewsCount": 31,
+   "imageUrl": "res:images/photo-1592924357228-91a4daadcfea-w600.jpg",
+   "description": "Sun-ripened vine tomatoes with rich savory acidity. Perfect for Sinigang broths, Ensaladang Talong, and fresh dips.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 104,
+   "name": "Fresh Sitaw & Organic Kalabasa Bundle",
+   "category": "Vegetables",
+   "price": 95,
+   "unit": "/bundle",
+   "discountPercent": 10,
+   "stock": 40,
+   "rating": 4.9,
+   "reviewsCount": 19,
+   "imageUrl": "res:images/squash_sitaw.jpg",
+   "description": "Tender string beans (sitaw) paired with sweet golden squash (kalabasa). Ideal for authentic Ginisang Kalabasa at Sitaw.",
+   "farmOrigin": "Riverside Farm (Laguna)"
+  },
+  {
+   "id": 105,
+   "name": "Highland Sweet Carrots & Broccoli",
+   "category": "Vegetables",
+   "price": 130,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 28,
+   "rating": 5.0,
+   "reviewsCount": 38,
+   "imageUrl": "res:images/photo-1598170845058-32b9d6a5da37-w600.jpg",
+   "description": "Sweet, crunchy highland orange carrots and compact dark-green broccoli florets picked fresh at dawn in Benguet.",
+   "farmOrigin": "Benguet Berry Haven (Benguet)"
+  },
+  {
+   "id": 106,
+   "name": "Purple Eggplant (Talong Tagalog)",
+   "category": "Vegetables",
+   "price": 65,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 55,
+   "rating": 4.8,
+   "reviewsCount": 27,
+   "imageUrl": "res:images/photo-1613881553903-4543f5f2cac9-w600.jpg",
+   "description": "Glossy purple native eggplants with tender skin and sweet flesh. Charcoal-grill ready for Tortang Talong.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 107,
+   "name": "Sweet Carabao Mangoes (Grade A)",
+   "category": "Fruits",
+   "price": 120,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 80,
+   "rating": 5.0,
+   "reviewsCount": 88,
+   "imageUrl": "res:images/carabao_mango.jpg",
+   "description": "Certified Grade A golden Carabao mangoes from Batangas orchards. Silky smooth, naturally tree-ripened, intensely sweet.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 108,
+   "name": "Fresh Highland Strawberries",
+   "category": "Fruits",
+   "price": 220,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 40,
+   "rating": 4.9,
+   "reviewsCount": 64,
+   "imageUrl": "res:images/photo-1464965911861-746a04b4bca6-w600.jpg",
+   "description": "Handpicked sweet red mountain strawberries from La Trinidad. Packed with natural vitamin C and intoxicating floral aroma.",
+   "farmOrigin": "Benguet Berry Haven (Benguet)"
+  },
+  {
+   "id": 109,
+   "name": "Pure Wild Forest Honey",
+   "category": "Others",
+   "price": 250,
+   "unit": "/bottle",
+   "discountPercent": 10,
+   "stock": 30,
+   "rating": 5.0,
+   "reviewsCount": 52,
+   "imageUrl": "res:images/photo-1587049352851-8d4e89133924-w600.jpg",
+   "description": "100% pure raw honeycomb nectar harvested by indigenous gatherers from flowering forest canopies.",
+   "farmOrigin": "Golden Sunflower Sanctuary (San Jose)"
+  },
+  {
+   "id": 110,
+   "name": "Crispy Saba Banana Chips",
+   "category": "Others",
+   "price": 60,
+   "unit": "/pack",
+   "discountPercent": 10,
+   "stock": 90,
+   "rating": 4.8,
+   "reviewsCount": 34,
+   "imageUrl": "res:images/photo-1528825871115-3581a5387919-w600.jpg",
+   "description": "Thinly sliced Saba bananas lightly crisped in virgin coconut oil with natural raw cane sugar glaze.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 111,
+   "name": "Benguet Mountain Arabica Beans",
+   "category": "Others",
+   "price": 280,
+   "unit": "/pack (250g)",
+   "discountPercent": 10,
+   "stock": 45,
+   "rating": 5.0,
+   "reviewsCount": 68,
+   "imageUrl": "res:images/photo-1559056199-641a0ac8b55e-w600.jpg",
+   "description": "Single-origin high-altitude Arabica coffee handpicked in Tublay, Benguet. Chocolatey notes with a clean caramel finish.",
+   "farmOrigin": "Benguet Berry Haven (Benguet)"
+  },
+  {
+   "id": 112,
+   "name": "Bukidnon Sweet Golden Queen Pineapple",
+   "category": "Fruits",
+   "price": 95,
+   "unit": "/piece",
+   "discountPercent": 10,
+   "stock": 70,
+   "rating": 4.9,
+   "reviewsCount": 54,
+   "imageUrl": "res:images/photo-1550258987-190a2d41a8ba-w600.jpg",
+   "description": "Sweet, low-acid Golden Queen pineapple grown on the volcanic slopes of Malaybalay, Bukidnon.",
+   "farmOrigin": "Bukidnon Highlands Eco-Orchard (Bukidnon)"
+  },
+  {
+   "id": 113,
+   "name": "Davao Single-Origin Artisan Tablea",
+   "category": "Others",
+   "price": 180,
+   "unit": "/roll (10 discs)",
+   "discountPercent": 10,
+   "stock": 50,
+   "rating": 5.0,
+   "reviewsCount": 92,
+   "imageUrl": "res:images/tablea.jpg",
+   "description": "100% pure fermented Criollo cacao nibs ground into traditional Filipino tablea for authentic rich hot tsokolate.",
+   "farmOrigin": "Davao Single-Origin Cacao (Davao)"
+  },
+  {
+   "id": 114,
+   "name": "Fresh Valencia Sweet Oranges",
+   "category": "Fruits",
+   "price": 130,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 65,
+   "rating": 4.8,
+   "reviewsCount": 42,
+   "imageUrl": "res:images/photo-1546548970-71785318a17b-w600.jpg",
+   "description": "Juicy, thin-skinned Valencia citrus harvested from sunny orchard slopes. Bursting with vitamin C and natural sweetness.",
+   "farmOrigin": "Sunnyvale Farm (Batangas)"
+  },
+  {
+   "id": 115,
+   "name": "Organic Red Dragonfruit (Pitaya)",
+   "category": "Fruits",
+   "price": 160,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 35,
+   "rating": 4.9,
+   "reviewsCount": 39,
+   "imageUrl": "res:fruit_picking/dragon_fruit.jpg",
+   "description": "Vibrant magenta-fleshed dragonfruit packed with antioxidants, fiber, and crisp refreshing sweetness.",
+   "farmOrigin": "Bukidnon Highlands Eco-Orchard (Bukidnon)"
+  },
+  {
+   "id": 116,
+   "name": "Fresh Purple Mangosteen",
+   "category": "Fruits",
+   "price": 190,
+   "unit": "/kg",
+   "discountPercent": 10,
+   "stock": 25,
+   "rating": 5.0,
+   "reviewsCount": 61,
+   "imageUrl": "res:images/mangosteen.jpg",
+   "description": "The queen of Philippine fruits. Thick purple rind shielding snow-white, floral sweet-tart citrusy segments.",
+   "farmOrigin": "Davao Single-Origin Cacao (Davao)"
+  }
+ ],
+ "bookings": [
+  {
+   "id": 101,
+   "bookingCode": "BK-2026-881",
+   "farmId": 2,
+   "farmName": "Golden Sunflower & Honeycomb Sanctuary",
+   "customerName": "Maria Santos",
+   "customerPhone": "+63 917 555 0192",
+   "customerEmail": "maria.santos@gmail.com",
+   "activity": "Sunflower Field & Bee Haven Tour",
+   "tourDate": "Nov 20, 2026",
+   "tourTime": "08:30 AM - Morning Agro-Walk",
+   "participants": 2,
+   "totalAmount": 500,
+   "paymentMethod": "Pay at the Farm",
+   "status": "Confirmed",
+   "attendanceStatus": "Pending Confirmation",
+   "assignedGuide": "Ate Rosa (Master Beekeeper)",
+   "specialRequests": "Vegetarian harvest snacks requested. 1 senior citizen in group; needs golf cart trail assist.",
+   "uploadedIdDoc": "Philippine National ID · Verified Eco-Tourist",
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
+  },
+  {
+   "id": 102,
+   "bookingCode": "BK-2026-882",
+   "farmId": 1,
+   "farmName": "Sunnyvale Farm",
+   "customerName": "James Smith",
+   "customerPhone": "+63 920 111 2233",
+   "customerEmail": "james.smith@outlook.com",
+   "activity": "Valencia Orange Fruit Picking",
+   "tourDate": "Nov 21, 2026",
+   "tourTime": "10:30 AM - Canopy Orchard Harvest",
+   "participants": 2,
+   "totalAmount": 400,
+   "paymentMethod": "Pay at the Farm",
+   "status": "Pending",
+   "attendanceStatus": "Pending Confirmation",
+   "assignedGuide": "Kuya Dennis (Senior Pomologist)",
+   "specialRequests": "First-time visitor. Needs 2 harvesting baskets and tree clippers.",
+   "uploadedIdDoc": "Passport / Tourist Visa Verified",
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
+  },
+  {
+   "id": 103,
+   "bookingCode": "BK-2026-883",
+   "farmId": 3,
+   "farmName": "Laurel Ridge Taal Overlook",
+   "customerName": "Sofia Tan",
+   "customerPhone": "+63 918 444 8899",
+   "customerEmail": "sofia.tan@gmail.com",
+   "activity": "Taal Ridge Cacao & Tablea Class",
+   "tourDate": "Nov 22, 2026",
+   "tourTime": "02:00 PM - Afternoon Farm Experience",
+   "participants": 2,
+   "totalAmount": 560,
+   "paymentMethod": "Pay at the Farm",
+   "status": "Confirmed",
+   "attendanceStatus": "Confirmed Attending",
+   "assignedGuide": "Mang Rigor (Heritage Agro Guide)",
+   "specialRequests": "Interested in purchasing 5 blocks of artisanal tablea after the workshop.",
+   "uploadedIdDoc": "Driver's License (Verified)",
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
+  },
+  {
+   "id": 104,
+   "bookingCode": "BK-2026-884",
+   "farmId": 1,
+   "farmName": "Sunnyvale Farm",
+   "customerName": "Anna Addyson",
+   "customerPhone": "+63 917 999 0011",
+   "customerEmail": "anna.addyson@yahoo.com",
+   "activity": "Heritage Farm Agro-Trail Walk",
+   "tourDate": "Nov 25, 2026",
+   "tourTime": "09:00 AM - Morning Agro-Walk",
+   "participants": 4,
+   "totalAmount": 800,
+   "paymentMethod": "Pay at the Farm",
+   "status": "Pending",
+   "attendanceStatus": "Pending Confirmation",
+   "assignedGuide": "Kuya Elmer (Trail Captain)",
+   "specialRequests": "Family group with 2 kids; requests animal feeding basket.",
+   "uploadedIdDoc": "Company ID Verified",
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
+  }
+ ],
+ "orders": [
+  {
+   "id": "ord-1",
+   "orderNumber": "ORD-2026-441",
+   "customerName": "Maria Santos",
+   "customerPhone": "+63 917 555 0192",
+   "customerAddress": "Unit 12B Green Residences, Taft Ave, Malate, Manila",
+   "items": [
+    {
+     "productName": "Carabao Mangoes",
+     "qty": 2,
+     "unitPrice": 120
+    },
+    {
+     "productName": "Pure Wild Honey",
+     "qty": 1,
+     "unitPrice": 250
+    }
+   ],
+   "totalAmount": 490,
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "COD",
+   "fulfillmentStatus": "Confirmed",
+   "orderDate": "Nov 19, 2026 · 10:15 AM",
+   "uploadedReceiptUrl": "",
+   "specialDeliveryNotes": "Please deliver fresh ripe mangoes with bubble padding.",
+   "courierName": "AgriExpress Direct Logistics",
+   "riderName": "Kuya Jun-Jun Ramos",
+   "riderPhone": "+63 920 112 3456",
+   "riderVehicle": "Yamaha NMAX (Insulated Box) · Plate DA 7192",
+   "currentLocation": "Taft Ave / Malate Corridor, Manila · 1.2 km away from destination",
+   "estimatedArrival": "Today, ~11:30 AM (15 mins away)",
+   "trackingNumber": "AGX-2026-88194",
+   "isReceivedByUser": false,
+   "deliverySteps": [
+    {
+     "title": "Order Placed & Payment Verified",
+     "location": "AgriTourism Gateway",
+     "timestamp": "Nov 19 · 10:15 AM",
+     "completed": true
+    },
+    {
+     "title": "Fresh Farm Harvest & Packed",
+     "location": "Sunnyvale Farm, Lipa City",
+     "timestamp": "Nov 19 · 10:35 AM",
+     "completed": true
+    },
+    {
+     "title": "Picked Up by Courier Rider",
+     "location": "Lipa Logistics Dispatch Center",
+     "timestamp": "Nov 19 · 10:55 AM",
+     "completed": true
+    },
+    {
+     "title": "Out for Delivery (On Route)",
+     "location": "Taft Ave / Malate Corridor",
+     "timestamp": "Nov 19 · 11:15 AM",
+     "completed": true,
+     "notes": "Rider approaching recipient building"
+    },
+    {
+     "title": "Delivered & Confirmed by Tourist",
+     "location": "Customer Delivery Address",
+     "timestamp": "Estimated 11:30 AM",
+     "completed": false
+    }
+   ]
+  },
+  {
+   "id": "ord-2",
+   "orderNumber": "ORD-2026-442",
+   "customerName": "Carlos Mendoza",
+   "customerPhone": "+63 918 333 7744",
+   "customerAddress": "Blk 4 Lot 15 Tierra Verde Subd, Lipa City, Batangas",
+   "items": [
+    {
+     "productName": "Organic Bitter Gourd (Ampalaya)",
+     "qty": 3,
+     "unitPrice": 65
+    },
+    {
+     "productName": "Farm Fresh Free-Range Eggs",
+     "qty": 2,
+     "unitPrice": 150
+    }
+   ],
+   "totalAmount": 495,
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "COD",
+   "fulfillmentStatus": "Confirmed",
+   "orderDate": "Nov 19, 2026 · 08:30 AM",
+   "uploadedReceiptUrl": "",
+   "specialDeliveryNotes": "Call upon arrival at subdivision security guard house.",
+   "courierName": "Batangas Green Courier",
+   "riderName": "Kuya Arnel Gutierrez",
+   "riderPhone": "+63 918 444 8899",
+   "riderVehicle": "Honda Click 150i · Plate BA 5521",
+   "currentLocation": "Lipa City Highway near Tierra Verde Subd gate",
+   "estimatedArrival": "Today, ~11:00 AM (5 mins away)",
+   "trackingNumber": "AGX-2026-33918",
+   "isReceivedByUser": false,
+   "deliverySteps": [
+    {
+     "title": "Order Placed & Payment Verified",
+     "location": "AgriTourism Gateway",
+     "timestamp": "Nov 19 · 08:30 AM",
+     "completed": true
+    },
+    {
+     "title": "Packed & Sealed by Farm Staff",
+     "location": "Sunnyvale Farm, Lipa City",
+     "timestamp": "Nov 19 · 09:00 AM",
+     "completed": true
+    },
+    {
+     "title": "Dispatched with Local Rider",
+     "location": "Lipa Express Hub",
+     "timestamp": "Nov 19 · 09:30 AM",
+     "completed": true
+    },
+    {
+     "title": "Out for Delivery",
+     "location": "Tierra Verde Gate 2",
+     "timestamp": "Nov 19 · 10:45 AM",
+     "completed": true
+    },
+    {
+     "title": "Delivered & Confirmed by Tourist",
+     "location": "Blk 4 Lot 15 Tierra Verde",
+     "timestamp": "Pending arrival",
+     "completed": false
+    }
+   ]
+  },
+  {
+   "id": "ord-3",
+   "orderNumber": "ORD-2026-443",
+   "customerName": "Anna Addyson",
+   "customerPhone": "+63 917 999 0011",
+   "customerAddress": "24 Acacia St, Ayala Alabang Village, Muntinlupa",
+   "items": [
+    {
+     "productName": "Pure Wild Honey",
+     "qty": 2,
+     "unitPrice": 250
+    },
+    {
+     "productName": "Crisp Benguet Highland Lettuce",
+     "qty": 2,
+     "unitPrice": 85
+    }
+   ],
+   "totalAmount": 670,
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "Paid on Delivery",
+   "fulfillmentStatus": "Confirmed",
+   "orderDate": "Nov 18, 2026 · 02:40 PM",
+   "uploadedReceiptUrl": "",
+   "specialDeliveryNotes": "Leave with security reception if recipient is not available.",
+   "courierName": "AgriExpress Direct Logistics",
+   "riderName": "Kuya Joel Bautista",
+   "riderPhone": "+63 917 222 3344",
+   "riderVehicle": "L300 Insulated Van · Plate NAK 4091",
+   "currentLocation": "Delivered at 24 Acacia St, Ayala Alabang Village, Muntinlupa",
+   "estimatedArrival": "Delivered & Confirmed",
+   "trackingNumber": "AGX-2026-11938",
+   "isReceivedByUser": true,
+   "receivedAt": "Nov 18, 2026 · 03:15 PM",
+   "receivedByRecipient": "Anna Addyson (Signed in good condition)",
+   "deliverySteps": [
+    {
+     "title": "Order Placed & Payment Verified",
+     "location": "AgriTourism Gateway",
+     "timestamp": "Nov 18 · 02:40 PM",
+     "completed": true
+    },
+    {
+     "title": "Harvested & Packed by Farmer",
+     "location": "Sunnyvale Farm, Lipa City",
+     "timestamp": "Nov 18 · 02:45 PM",
+     "completed": true
+    },
+    {
+     "title": "In Transit via SLEX",
+     "location": "South Luzon Expressway Alabang Exit",
+     "timestamp": "Nov 18 · 03:00 PM",
+     "completed": true
+    },
+    {
+     "title": "Out for Delivery",
+     "location": "Ayala Alabang Village Gate 1",
+     "timestamp": "Nov 18 · 03:10 PM",
+     "completed": true
+    },
+    {
+     "title": "Delivered & Confirmed by Tourist",
+     "location": "24 Acacia St Doorstep",
+     "timestamp": "Nov 18 · 03:15 PM",
+     "completed": true,
+     "notes": "Package received & verified by Anna Addyson"
+    }
+   ]
+  }
+ ],
+ "reviews": [
+  {
+   "id": 1,
+   "author": "Maria Santos",
+   "roleTag": "Eco-Tourist from Manila",
+   "rating": 5,
+   "date": "October 2026",
+   "farmOrCrop": "Sunnyvale Farm Tour",
+   "comment": "The rambutan and mango groves are magical! Mang Juan's family welcomed us with fresh buko and hot kapeng barako. Picking sweet oranges straight from the trees was unforgettable for our kids!"
+  },
+  {
+   "id": 2,
+   "author": "Engr. Carlo Reyes",
+   "roleTag": "Weekend Explorer",
+   "rating": 5,
+   "date": "October 2026",
+   "farmOrCrop": "Sunflower Sanctuary & Bee Haven",
+   "comment": "Over 50,000 sunflowers in full bloom! The stingless bees are so gentle, and tasting fresh honey squeezed straight from the comb is an experience you won't get in the city."
+  },
+  {
+   "id": 3,
+   "author": "Jasmine Siddiqui",
+   "roleTag": "Culinary Blogger",
+   "rating": 5,
+   "date": "September 2026",
+   "farmOrCrop": "Laurel Ridge Taal Overlook",
+   "comment": "The view of Taal Lake while roasting fresh cacao beans into pure Batangas tablea is pure therapeutic bliss. Highly recommended!"
+  },
+  {
+   "id": 4,
+   "author": "Gabriel Mendoza",
+   "roleTag": "Organic Produce Buyer",
+   "rating": 5,
+   "date": "October 2026",
+   "farmOrCrop": "Fresh Organic Vegetables",
+   "comment": "The organic Ampalaya and Baguio Romaine delivered straight to our doorstep in Quezon City were crisp and garden-fresh. True farm-to-table quality."
+  }
+ ],
+ "notifications": [
+  {
+   "id": 99,
+   "title": "1-Day Before Tour: Will you proceed tomorrow?",
+   "desc": "Sunflower Field & Bee Haven Tour scheduled tomorrow at 08:30 AM! Please confirm your attendance.",
+   "fullDetail": "Friendly 1-Day reminder from AgriTourism Philippines: Your guided eco-tour to Golden Sunflower & Honeycomb Sanctuary is scheduled for tomorrow at 08:30 AM (2 guests). Please confirm if you will proceed so farm host Mang Juan can prepare fresh refreshments, harvested fruits, and assign your personal agro-guide.",
+   "time": "1 day before appointment",
+   "read": false,
+   "type": "attendance_reminder",
+   "targetRole": "tourist",
+   "bookingId": 101,
+   "attendanceStatus": "Pending Confirmation"
+  },
+  {
+   "id": 2,
+   "title": "New Harvest Deal 10% OFF",
+   "desc": "10% OFF on all fresh organic vegetables from Batangas orchards.",
+   "fullDetail": "Batangas organic farms just published a new harvest of Bitter Gourd, Plump Tomatoes, and Baguio Lettuce with automatic 10% discount applied at checkout.",
+   "time": "1 hour ago",
+   "read": false,
+   "type": "market",
+   "targetRole": "tourist"
+  },
+  {
+   "id": 3,
+   "title": "Farmer Reservation Update",
+   "desc": "Mang Juan accepted tour booking #BK-2026-882.",
+   "fullDetail": "Mang Juan Dela Cruz reviewed and approved tour booking #BK-2026-882 for Sunnyvale Farm Heritage Agro-Trail. The farm is ready to welcome your group.",
+   "time": "3 hours ago",
+   "read": true,
+   "type": "booking_update",
+   "targetRole": "tourist"
+  },
+  {
+   "id": 10,
+   "title": "New Tourist Tour Booking: James Smith",
+   "desc": "James Smith booked Valencia Orange Fruit Picking for 2 guests.",
+   "fullDetail": "New tourist reservation received for 2 guests on Nov 21, 2026 at 10:30 AM. Payment: cash on arrival. Customer contact: +63 920 111 2233. Tourist uploaded valid ID and special requests for orange crates.",
+   "time": "20 mins ago",
+   "read": false,
+   "type": "farmer_booking_alert",
+   "targetRole": "farmer"
+  },
+  {
+   "id": 11,
+   "title": "New Tourist Produce Order #ORD-2026-441",
+   "desc": "Maria Santos ordered 2kg Carabao Mangoes & Pure Wild Honey.",
+   "fullDetail": "Tourist Maria Santos placed order #ORD-2026-441: 2kg Carabao Mangoes and 1 bottle Pure Wild Honey. Delivery address: Unit 12B Green Residences, Taft Ave, Malate, Manila. Payment method: cash on delivery. Ready for harvest packing.",
+   "time": "40 mins ago",
+   "read": false,
+   "type": "farmer_order",
+   "targetRole": "farmer"
+  },
+  {
+   "id": 12,
+   "title": "Visitor Attendance Alert: Sofia Tan",
+   "desc": "Sofia Tan confirmed attendance for Cacao Forest Experience.",
+   "fullDetail": "Tourist Sofia Tan responded YES to the 1-day confirmation check. Reference #BK-2026-883. Group size: 2 guests. Arrival scheduled on Nov 22 at 02:00 PM.",
+   "time": "2 hours ago",
+   "read": true,
+   "type": "farmer_attendance_alert",
+   "targetRole": "farmer"
+  }
+ ],
+ "config": {
+  "globalFarmBackground": "res:images/photo-1500937386664-56d1dfef3854-w2560.jpg",
+  "sunnyvaleTourBanner": "res:images/photo-1589923188900-85dae523342b-w1000.jpg",
+  "fruitPickingBanner": "res:images/photo-1611080626919-7cf5a9dbab5b-w1200.jpg",
+  "farmLifeBannerPhoto": "res:images/photo-1615811361523-6bd03d7748e7-w1600.jpg",
+  "mangRigorPhoto": "res:images/photo-1589923188900-85dae523342b-w1000.jpg",
+  "mariaAvatar": "res:farmers/Anabelle.png",
+  "juanAvatar": "res:farmers/Juan.png",
+  "adminAvatar": "res:farmers/Pedro.png",
+  "receiptSamplePhoto": "res:images/receipt.png",
+  "defaultProductFallbackImage": "res:images/photo-1540420773420-3366772f4999-w600.jpg",
+  "farmerProfileBanner": "res:images/photo-1500937386664-56d1dfef3854-w1400.jpg",
+  "presetMangoImage": "res:images/photo-1553279768-865429fa0078-w600.jpg",
+  "presetTomatoImage": "res:images/photo-1592924357228-91a4daadcfea-w600.jpg",
+  "presetPapayaImage": "res:images/photo-1617112848923-cc2234396a8d-w600.jpg",
+  "presetStrawberryImage": "res:images/photo-1464965911861-746a04b4bca6-w600.jpg",
+  "presetHoneyImage": "res:images/photo-1587049352851-8d4e89133924-w600.jpg",
+  "presetEggplantImage": "res:images/photo-1613881553903-4543f5f2cac9-w600.jpg"
+ },
+ "users": [
+  {
+   "fullName": "Maria Santos",
+   "email": "maria.santos@gmail.com",
+   "phone": "+63 917 555 0192",
+   "role": "user",
+   "address": "Unit 402 Greenbelt Residences, Legazpi St, Makati City"
+  },
+  {
+   "fullName": "Juan Dela Cruz",
+   "email": "juan.delacruz@sunnyvalefarm.ph",
+   "phone": "+63 918 220 4471",
+   "role": "farmer",
+   "address": "Sunnyvale Farm, Bauan, Batangas",
+   "farmerId": 1
+  }
+ ],
+ "guides": [
+  {
+   "id": 1,
+   "farmerId": 1,
+   "name": "Ate Rosa (Master Beekeeper)"
+  },
+  {
+   "id": 2,
+   "farmerId": 1,
+   "name": "Ramon (Bee & Honey Specialist)"
+  },
+  {
+   "id": 3,
+   "farmerId": 2,
+   "name": "Kuya Dennis (Senior Pomologist)"
+  },
+  {
+   "id": 4,
+   "farmerId": 2,
+   "name": "Ate Luisa (Organic Trail Guide)"
+  },
+  {
+   "id": 5,
+   "farmerId": 3,
+   "name": "Mang Rigor (Heritage Agro Guide)"
+  },
+  {
+   "id": 6,
+   "farmerId": 3,
+   "name": "Mang Ben (Orchard Elder)"
+  },
+  {
+   "id": 7,
+   "farmerId": 4,
+   "name": "Kuya Elmer (Trail Captain)"
+  },
+  {
+   "id": 8,
+   "farmerId": 4,
+   "name": "Kuya Noel (Master Horticulturist)"
+  },
+  {
+   "id": 9,
+   "farmerId": 5,
+   "name": "Ka Doris (Cacao Agroforest Guide)"
+  }
+ ],
+ "couriers": [
+  {
+   "id": 1,
+   "company": "AgriExpress Direct Logistics",
+   "riderName": "Kuya Jun-Jun Ramos",
+   "riderPhone": "+63 920 112 3456",
+   "vehicle": "Yamaha NMAX (Insulated Box) · Plate DA 7192",
+   "hub": "Lipa Express Logistics Center"
+  },
+  {
+   "id": 2,
+   "company": "FarmLink Couriers",
+   "riderName": "Kuya Arnel Cruz",
+   "riderPhone": "+63 917 448 2210",
+   "vehicle": "Honda Click 125 (Cooler Box) · Plate NBC 4471",
+   "hub": "Calamba Farm Hub"
+  },
+  {
+   "id": 3,
+   "company": "Highland Fresh Movers",
+   "riderName": "Manong Celso Bautista",
+   "riderPhone": "+63 908 551 7720",
+   "vehicle": "Suzuki Multicab (Chiller) · Plate ABK 2035",
+   "hub": "La Trinidad Trading Post"
+  }
+ ],
+ "timeSlots": [
+  {
+   "activityType": "tour",
+   "activityId": 1,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 1,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 1,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 1,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 2,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 2,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 2,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 2,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 3,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 3,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 3,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 3,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 4,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 4,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 4,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 4,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 5,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 5,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 5,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 5,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 6,
+   "label": "08:00 AM - Morning Agro-Walk"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 6,
+   "label": "10:30 AM - Canopy & Cacao Trail"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 6,
+   "label": "02:00 PM - Afternoon Farm Experience"
+  },
+  {
+   "activityType": "tour",
+   "activityId": 6,
+   "label": "04:00 PM - Sunset Overlook"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 1,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 1,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 1,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 1,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 2,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 2,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 2,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 2,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 3,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 3,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 3,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 3,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 4,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 4,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 4,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 4,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 5,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 5,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 5,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 5,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 6,
+   "label": "07:30 AM - Cool Morning Orchard Harvest"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 6,
+   "label": "09:30 AM - Prime Picking Session"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 6,
+   "label": "02:30 PM - Afternoon Family Picking"
+  },
+  {
+   "activityType": "orchard",
+   "activityId": 6,
+   "label": "04:00 PM - Golden Hour Farm Harvest"
+  }
+ ],
+ "settings": {
+  "delivery_fee": "70",
+  "delivery_eta": "Within 1-2 days",
+  "product_categories": "Vegetables,Fruits,Others"
+ },
+  "faqs": [
+    {
+      "question": "How do I book a farm tour or fruit picking?",
+      "answer": "Create a free tourist account, then open Explore Tours or Fruit Picking. Choose a date and available time slot, then pay at the farm. Your ticket appears under My Bookings."
+    },
+    {
+      "question": "Can I look around without an account?",
+      "answer": "Yes. The opening page shows every farm, product and orchard with photos and full descriptions. You only need to log in to book, buy produce or leave a review."
+    },
+    {
+      "question": "What payment methods are accepted?",
+      "answer": "For farm product orders, customers can use Cash on Delivery (COD), where available. For tour bookings, payment is made directly at the farm through Pay at the Farm."
+    },
+    {
+      "question": "Can I change or cancel a booking?",
+      "answer": "Open My Bookings to reschedule or cancel. One day before your visit we also ask you to confirm whether you will attend."
+    },
+    {
+      "question": "How long does produce delivery take?",
+      "answer": "Most orders arrive within 1-2 days. Contact the farm through the details on its profile for an order update."
+    },
+    {
+      "question": "How do I change my profile photo?",
+      "answer": "Click your name or photo at the top right, then choose Change Photo."
+    },
+    {
+      "question": "I'm a farmer. How do I list my farm?",
+      "answer": "Sign up and choose Farmer. You can then add your story, photos, tours, fruit-picking experiences, produce, guides and time slots from your farmer profile."
+    },
+    {
+      "question": "Who do I contact for help?",
+      "answer": "Use Forgot password on the login page for account issues, or contact the farm directly using the details on its profile."
+    }
+  ]
+}

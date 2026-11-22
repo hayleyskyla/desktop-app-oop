@@ -46,9 +46,8 @@ button{background:#1E562F;color:#fff;border:none;padding:10px 20px;border-radius
 <div class="h"><div><div class="b">AgriTourism Philippines</div><p style="font-size:11px;opacity:.85;margin-top:2px">Official Verified Farm E-Ticket Pass</p></div><span class="badge">Confirmed Entry</span></div>
 <div class="ct"><span class="ref">Pass Reference: ${esc(b.bookingCode)}</span><h1>${esc(b.farmName)}</h1><p class="sub">${esc(b.activity)}</p>
 <div class="g">${card("Tour Date", b.tourDate)}${card("Scheduled Slot", b.tourTime)}${card("Lead Visitor", b.customerName)}${card("Party Size", "${b.participants} Guests")}
-${card("Assigned Guide", b.assignedGuide ?: "To be assigned")}${card("Total Admission Paid", "₱${money(b.totalAmount)} (${b.paymentMethod ?: "GCash"})")}</div>
-<div class="i"><strong>Gate Turnstile Instructions:</strong><br>Please arrive 15 minutes before your time slot. Present this digital ticket on your phone or printed paper at the farm entrance scanner. Includes complimentary native welcome drink and farm basket.</div>
-<div style="font-family:monospace">||| |||| | ||| |||| | |||||</div><div style="font-size:10px;color:#64748B">SECURE CHECK-IN #${b.id}</div></div>""", autoPrint)
+${card("Assigned Guide", b.assignedGuide ?: "To be assigned")}${card("Total Admission", "₱${money(b.totalAmount)} (${b.paymentMethod ?: "Pay at the Farm"})")}</div>
+<div class="i"><strong>Gate Instructions:</strong><br>Please arrive 15 minutes before your time slot and present booking reference ${esc(b.bookingCode)} at the farm entrance. Includes complimentary native welcome drink and farm basket.</div></div>""", autoPrint)
 
     fun receiptHtml(r: Receipt) = page(r.receiptNumber, """
 <div class="h"><div><div class="b">AgriTourism Philippines</div><p style="font-size:11px;opacity:.85">Official Electronic Sales Invoice &amp; Receipt</p></div><span class="badge">${esc(r.paymentStatus)}</span></div>

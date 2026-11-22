@@ -18,8 +18,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ph.agritourism.model.BookingDateWindow
+import ph.agritourism.model.Product
 import ph.agritourism.model.Role
+import ph.agritourism.model.bookingTotal
+import ph.agritourism.model.NO_BOOKING_SCHEDULE_MESSAGE
 import ph.agritourism.ui.*
+import java.time.Instant
+import java.time.ZoneOffset
 
 @Composable
 fun Overlays(s: AppState) {
@@ -32,7 +38,7 @@ fun Overlays(s: AppState) {
     if (s.isFruitModalOpen) FruitModal(s)
     s.selectedBookingForView?.let { BookingDossier(s, it) }
     s.selectedOrderForView?.let { OrderDossier(s, it.id) }
-    s.selectedOrderForTracking?.let { TrackingInspector(s, it.id) }
+    s.selectedProductForView?.let { ProductDetailModal(s, it) }
     s.editingBooking?.let { EditBookingModal(s, it) }
     s.reviewingBooking?.let { ReviewModal(s, it) }
     s.deletingBookingId?.let { DeleteConfirm(s, it) }
@@ -43,7 +49,7 @@ fun Overlays(s: AppState) {
     s.catalogPreview?.let { CatalogPreviewModal(s, it) }
     if (s.isAddTourModalOpen) AddActivityModal(s, orchard = false)
     if (s.isAddOrchardModalOpen) AddActivityModal(s, orchard = true)
-    if (s.isEditStoryOpen) s.myFarm?.let { EditStoryModal(s, it) }
+    if (s.isEditStoryOpen) (s.editingFarmerStory ?: s.myFarm)?.let { EditStoryModal(s, it) }
     s.editingTour?.let { t -> key(t.id) { AddActivityModal(s, orchard = false, tour = t) } }
     s.editingOrchard?.let { o -> key(o.id) { AddActivityModal(s, orchard = true, orchardItem = o) } }
     s.pendingConfirm?.let { c ->
@@ -51,7 +57,7 @@ fun Overlays(s: AppState) {
             icon = { Icon(Icons.Outlined.Delete, null, tint = Palette.Red) },
             title = { Text(c.title) }, text = { Text(c.message) },
             confirmButton = { PrimaryButton(c.yesLabel, color = Palette.Red) { s.pendingConfirm = null; c.action() } },
-            dismissButton = { SecondaryButton("Keep") { s.pendingConfirm = null } })
+            dismissButton = { SecondaryButton(c.cancelLabel) { s.pendingConfirm = null } })
     }
 }
 
@@ -63,16 +69,16 @@ private fun NotificationsDrawer(s: AppState) {
             .clip(RoundedCornerShape(20.dp)).background(Color.White).clickable(remember { MutableInteractionSource() }, null) {}) {
             Row(Modifier.fillMaxWidth().background(Palette.Deep).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Notifications, null, tint = Color(0xFF86EFAC)); Spacer(Modifier.width(8.dp))
-                Text(if (s.userRole == Role.FARMER) "Farmer Host Alerts" else "Farm Notifications", Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.ExtraBold)
+                Text("Notification", Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.ExtraBold)
                 if (s.unreadCount > 0) Pill("${s.unreadCount} New", Color(0xFF86EFAC), Palette.Deep)
-                IconButton({ s.isNotificationsOpen = false }) { Icon(Icons.Filled.Close, "Close", tint = Color.White) }
+                TextAction("Close", color = Color.White) { s.isNotificationsOpen = false }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (s.roleFilteredNotifications.isEmpty()) Sub("No new alerts for this account.", Modifier.padding(24.dp))
+                if (s.roleFilteredNotifications.isEmpty()) Sub("No new items for this account.", Modifier.padding(24.dp))
                 s.roleFilteredNotifications.forEach { n ->
                     Column(Modifier.fillMaxWidth().background(if (n.read) Color.White else Color(0xFFF0FDF4)).clickable { s.openNotification(n) }.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Label(when (n.type) { "attendance_reminder" -> "1-Day Pre-Tour Reminder"; "farmer_attendance_alert" -> "Visitor Arrival Alert"; "booking" -> "Booking Alert"; "farmer_order" -> "Produce Order Alert"; "farmer_booking_alert" -> "New Tour Booking"; else -> "Harvest Update" })
+                            Label(when (n.type) { "attendance_reminder" -> "1-Day Pre-Tour Reminder"; "farmer_attendance_alert" -> "Visitor Arrival"; "booking_update" -> "Booking Update"; "farmer_order" -> "Produce Order"; "order" -> "Marketplace Order"; "farmer_booking_alert" -> "New Tour Booking"; else -> "Harvest Update" })
                             Spacer(Modifier.weight(1f)); if (!n.read) Box(Modifier.size(8.dp).clip(CircleShape).background(Palette.Amber))
                         }
                         Text(n.title, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = Palette.Deep)
@@ -99,7 +105,7 @@ private fun NotificationDetail(s: AppState, id: Long) {
     val n = s.notifications.firstOrNull { it.id == id } ?: s.selectedNotification ?: return
     val close = { s.selectedNotification = null }
     Modal(close, 520.dp) {
-        ModalHeader(n.title, when (n.type) { "attendance_reminder" -> "Tour Attendance Confirmation"; "farmer_attendance_alert" -> "Host Reservation Alert"; "booking" -> "Tour Booking Alert"; else -> "Farm Update" },
+        ModalHeader(n.title, when (n.type) { "attendance_reminder" -> "Tour Attendance Confirmation"; "farmer_attendance_alert" -> "Host Reservation"; "booking_update" -> "Booking Update"; else -> "Farm Update" },
             Icons.Outlined.Notifications, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(n.fullDetail, fontSize = 14.sp, color = Color(0xFF334155))
@@ -116,11 +122,21 @@ private fun NotificationDetail(s: AppState, id: Long) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton(if (n.type == "market") "Explore Farm Produce →" else "View Bookings Page →") {
+                PrimaryButton(when {
+                    n.type == "farmer_order" || s.isAdmin && n.type == "order" -> "View Marketplace Orders →"
+                    n.type == "order" -> "View My Purchases →"
+                    n.type == "market" -> "Explore Farm Produce →"
+                    else -> "View Bookings Page →"
+                }) {
                     close(); s.isNotificationsOpen = false
-                    s.navigate(if (n.type in setOf("booking", "attendance_reminder", "farmer_attendance_alert")) Page.MY_BOOKINGS else Page.MARKET)
+                    s.navigate(when {
+                        n.type == "farmer_order" || s.isAdmin && n.type == "order" -> Page.FARMER_ORDERS
+                        n.type == "order" -> Page.MY_PURCHASES
+                        n.type == "market" -> Page.MARKET
+                        else -> Page.MY_BOOKINGS
+                    })
                 }
-                SecondaryButton("Close") { close() }
+                TextAction("Close") { close() }
             }
         }
     }
@@ -142,16 +158,64 @@ private fun ProfileModal(s: AppState) {
             }
             TextButton({ pickImageFile("Choose profile photo")?.let(s::changeAvatar) }, Modifier.handCursor()) { Text("Change Photo", fontWeight = FontWeight.Bold) }
             var name by remember { mutableStateOf(s.displayName) }
+            var email by remember { mutableStateOf(s.userEmail) }
             var phone by remember { mutableStateOf(s.currentUser?.phone.orEmpty()) }
+            var location by remember { mutableStateOf(s.currentUser?.address.orEmpty()) }
             var error by remember { mutableStateOf<String?>(null) }
             H2(s.displayName); Pill("${s.userRole.key} Account".uppercase())
-            InfoTile("Email Address", s.userEmail, Icons.Outlined.Mail, Modifier.fillMaxWidth())
-            Field("Full Name", name, { name = it }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Person)
-            Field("Contact Phone", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" } }, Modifier.fillMaxWidth(), "+63 912 345 6789", icon = Icons.Outlined.Phone)
+            Field("Email Address", email, { email = it.trim() }, Modifier.fillMaxWidth(), "you@email.com", icon = Icons.Outlined.Mail, testTag = "profile-email")
+            Field("Full Name", name, { name = it }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Person, testTag = "profile-name")
+            Field("Contact Phone", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" } }, Modifier.fillMaxWidth(), "+63 912 345 6789", icon = Icons.Outlined.Phone, testTag = "profile-phone")
+            Field("Location", location, { location = it }, Modifier.fillMaxWidth(), "City or address", icon = Icons.Outlined.Place, testTag = "profile-location")
             ErrorBanner(error)
-            PrimaryButton("Save Profile", Modifier.fillMaxWidth()) {
-                error = if (name.trim() == s.displayName && phone.trim() == s.currentUser?.phone.orEmpty()) null else s.updateProfile(name, phone)
+            PrimaryButton("Save Changes", Modifier.fillMaxWidth()) {
+                val changed = name.trim() != s.displayName || !email.trim().equals(s.userEmail, true) ||
+                    phone.trim() != s.currentUser?.phone.orEmpty() || location.trim() != s.currentUser?.address.orEmpty()
+                error = when {
+                    !changed -> null
+                    email.isBlank() -> "Email cannot be empty."
+                    else -> s.updateProfile(name, phone, location, email)
+                }
                 if (error == null) close()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductDetailModal(s: AppState, product: Product) {
+    val close = { s.selectedProductForView = null }
+    val quantity = s.cart.firstOrNull { it.product.id == product.id }?.quantity ?: 0
+    val farm = s.farmers.firstOrNull { it.id == product.farmerId }
+    val farmerName = farm?.name
+        ?: s.userAccounts.firstOrNull { it.farmerId == product.farmerId && it.role == Role.FARMER }?.fullName
+        ?: "—"
+    val farmName = farm?.farmName ?: product.farmOrigin
+    val farmLocation = farm?.let { listOf(it.location, it.province).filter { value -> value.isNotBlank() }.joinToString(", ") }.orEmpty().ifBlank { "—" }
+    Modal(close, 560.dp) {
+        AsyncImage(product.imageUrl, Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(16.dp)), contentDescription = "Picture of ${product.name}")
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    H1(product.name)
+                    Sub(product.category)
+                }
+                Text("$PESO${money(product.discountedPrice)} ${product.unit}", fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
+            }
+            HorizontalDivider(color = Palette.Border)
+            Text("Product Details", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+            Text("Product Name: ${product.name}", fontSize = 13.sp, color = Palette.Ink)
+            Text("Farmer Name: $farmerName", fontSize = 13.sp, color = Palette.Ink)
+            Text("Farm Name: $farmName", fontSize = 13.sp, color = Palette.Ink)
+            Text("Farm Location: $farmLocation", fontSize = 13.sp, color = Palette.Ink)
+            Text("Description: ${product.description}", fontSize = 13.sp, color = Palette.Ink)
+            Text(if (product.stock > 0) "${product.stock} available · $quantity in your cart" else "Currently sold out",
+                fontSize = 12.sp, color = if (product.stock > 0) Palette.Forest else Palette.Red, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton("Add to Cart", Modifier.weight(1f), Icons.Filled.Add, enabled = product.stock > quantity) {
+                    s.addToCart(product)
+                }
+                TextAction("Back") { close() }
             }
         }
     }
@@ -190,6 +254,12 @@ private fun AddProductModal(s: AppState) {
                     }
                 }
             }
+            if (s.isAdmin) {
+                val farmOptions = listOf(0) + s.farmers.map { it.id }
+                Dropdown("Farm Seller", farmOptions, s.adminListingFarmId ?: 0, { id ->
+                    if (id == 0) "Unassigned / Platform" else s.farmers.first { it.id == id }.farmName
+                }) { s.adminListingFarmId = it }
+            }
             Field("Product Name", s.newProductName, { s.newProductName = it }, placeholder = "e.g. Fresh Carabao Mangoes")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Dropdown("Category", s.productCategories, s.newProductCategory, { it }, Modifier.weight(1f)) { s.newProductCategory = it }
@@ -220,12 +290,16 @@ private fun AddBookingModal(s: AppState) {
     if (s.myTours.isEmpty()) {
         Modal(close0, 480.dp) {
             ModalHeader("Create Tour Booking", onClose = close0)
-            Column(Modifier.padding(22.dp)) { Sub("Your farm has no tours yet, so walk-in tour bookings aren't available."); Spacer(Modifier.height(12.dp)); SecondaryButton("Close") { close0() } }
+            Column(Modifier.padding(22.dp)) {
+                Sub("Your farm has no tours yet, so walk-in tour bookings aren't available.")
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { TextAction("Close") { close0() } }
+            }
         }
         return
     }
     val tour = s.myTours.firstOrNull { it.name == s.newBookingActivity } ?: s.myTours.first()
-    val slots = s.slotsFor("tour", tour.id)
+    val slots = s.availableSlotsFor("tour", tour.id)
     LaunchedEffect(tour.id, slots) { if (s.newBookingTime !in slots) s.newBookingTime = slots.firstOrNull().orEmpty() }
     Modal(close, 600.dp) {
         ModalHeader("Create Tour Booking", "Farmer manual booking for walk-in tourists or phone reservations", Icons.Outlined.EventAvailable, close)
@@ -234,31 +308,89 @@ private fun AddBookingModal(s: AppState) {
                 Field("Guest / Customer Full Name", s.newBookingCustomer, { s.newBookingCustomer = it }, Modifier.weight(1f), "e.g. Anna Addyson")
                 Field("Mobile Phone", s.newBookingPhone, { s.newBookingPhone = it }, Modifier.weight(1f), "+63 918 333 4455")
             }
-            Dropdown("Select Tour", s.myTours.map { it.name }, tour.name, { n -> "$n (₱${s.myTours.first { it.name == n }.pricePerPerson}/pax)" }) { s.newBookingActivity = it }
+            Dropdown("Select Tour", s.myTours.map { it.name }, tour.name, { n ->
+                val selected = s.myTours.first { it.name == n }
+                "$n (₱${selected.pricePerPerson} ${selected.priceType.label})"
+            }) { s.newBookingActivity = it }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 DateField("Tour Schedule Date", s.newBookingDate, { s.newBookingDate = it }, Modifier.weight(1f))
-                Dropdown("Time Slot", slots, s.newBookingTime, { it.ifBlank { "No time slots set up" } }, Modifier.weight(1f)) { s.newBookingTime = it }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Label("Number of Guests / Pax"); Stepper(s.newBookingGuests, "") { s.newBookingGuests = it } }
-                Column(horizontalAlignment = Alignment.End) {
-                    Label("Calculated Total Payment")
-                    Text("$PESO${money(tour.pricePerPerson * s.newBookingGuests)}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
+                Column(Modifier.weight(1f)) {
+                    Dropdown("Time Slot", slots, s.newBookingTime, { it.ifBlank { "No time slots available" } }) { s.newBookingTime = it }
+                    if (slots.isEmpty()) Sub(NO_BOOKING_SCHEDULE_MESSAGE)
                 }
             }
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
+                Label("Calculated Total Payment")
+                Text("$PESO${money(tour.bookingTotal(1))}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
+            }
             Label("Payment Method")
-            ChoiceRow(listOf("GCash", "Maya", "Cash on Arrival"), s.newBookingPayment) { s.newBookingPayment = it }
-            PrimaryButton("Confirm & Record Tour Booking", Modifier.fillMaxWidth(), enabled = s.newBookingCustomer.isNotBlank() && isValidDate(s.newBookingDate)) { s.saveFarmerBooking() }
+            ChoiceRow(WALK_IN_PAYMENT_METHODS, s.newBookingPayment) { s.newBookingPayment = it }
+            PrimaryButton("Confirm", Modifier.fillMaxWidth(),
+                enabled = s.newBookingCustomer.isNotBlank() && isValidDate(s.newBookingDate) && s.newBookingTime in slots) { s.saveFarmerBooking() }
         }
     }
 }
 
-fun isValidDate(v: String) = runCatching { java.time.LocalDate.parse(v) }.isSuccess
+fun isValidDate(v: String) = parseTourDate(v)?.let(BookingDateWindow.current()::contains) == true
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DateField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    Field(label, value, { v -> onChange(v.filter { it.isDigit() || it == '-' }.take(10)) }, modifier, "YYYY-MM-DD", icon = Icons.Outlined.CalendarMonth,
-        error = if (value.isNotEmpty() && !isValidDate(value)) "Use format YYYY-MM-DD" else null)
+    val window = BookingDateWindow.current()
+    var open by remember { mutableStateOf(false) }
+    val selectedDate = parseTourDate(value)?.takeIf(window::contains)
+    val error = if (value.isNotBlank() && selectedDate == null) {
+        "Choose a date from today through December 31 of next year."
+    } else null
+    Column(modifier) {
+        if (label.isNotEmpty()) { Label(label); Spacer(Modifier.height(5.dp)) }
+        Row(
+            Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(12.dp))
+                .background(Color.White).border(1.dp, if (error == null) Palette.Border else Palette.Red, RoundedCornerShape(12.dp))
+                .handCursor().clickable { open = true }.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(17.dp), tint = Palette.Muted)
+            Spacer(Modifier.width(9.dp))
+            Text(
+                selectedDate?.toString() ?: "Select a date",
+                Modifier.weight(1f),
+                fontSize = 13.sp,
+                color = if (selectedDate == null) Palette.Muted else Color(0xFF1E1E1E),
+            )
+            Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(17.dp), tint = Palette.Forest)
+        }
+        if (error != null) Sub(error, Modifier.padding(start = 4.dp, top = 5.dp))
+    }
+    if (open) {
+        val initialDate = selectedDate ?: window.first
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            yearRange = window.first.year..window.last.year,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                    return window.contains(date)
+                }
+
+                override fun isSelectableYear(year: Int) = year in window.first.year..window.last.year
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { millis ->
+                        onChange(Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                    }
+                    open = false
+                }, enabled = state.selectedDateMillis != null) { Text("Select") }
+            },
+            dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } },
+        ) {
+            DatePicker(state = state, showModeToggle = false)
+        }
+    }
 }
 
 // ------------------------------------------------------------------ write review

@@ -5,11 +5,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,8 +25,8 @@ import kotlin.math.roundToInt
 @Composable
 fun CheckoutPage(s: AppState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { H1("Your Cart & Checkout"); Sub("Secure payment via GCash, Bank Transfer, or Cash on Delivery") }
-        SecondaryButton("Continue Shopping", icon = Icons.AutoMirrored.Outlined.ArrowBack) { s.navigate(Page.MARKET) }
+        Column(Modifier.weight(1f)) { H1("Your Cart & Checkout"); Sub("Pay the delivery rider in cash when your order arrives") }
+        TextAction("Back") { s.navigate(Page.MARKET) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         listOf("1 Cart", "2 Delivery", "3 Payment", "4 Confirmation").forEachIndexed { i, t ->
@@ -52,13 +52,55 @@ fun CheckoutPage(s: AppState) {
             Spacer(Modifier.height(12.dp))
             Field("Special Rider Instructions", s.deliveryNotes, { s.deliveryNotes = it }, placeholder = "Optional — landmarks, gate code, etc.", icon = Icons.Outlined.EditNote, maxLength = 200)
             Spacer(Modifier.height(18.dp))
-            Row { SecondaryButton("Back to Cart") { s.checkoutStep = 1 }; Spacer(Modifier.weight(1f)); PrimaryButton("Proceed to Payment Method →") { s.deliveryDetailsError()?.let(s::showToast) ?: run { s.checkoutStep = 3 } } }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                PrimaryButton("Proceed to Payment Method →") { s.deliveryDetailsError()?.let(s::showToast) ?: run { s.checkoutStep = 3 } }
+                Spacer(Modifier.width(12.dp))
+                TextAction("Back") { s.checkoutStep = 1 }
+            }
         }
         3 -> PaymentStep(s)
-        else -> ConfirmStep(s)
+        else -> CartStep(s)
+    }
+    s.purchaseConfirmationOrder?.let { order ->
+        val close = {
+            s.purchaseConfirmationOrder = null
+            s.checkoutStep = 1
+            s.navigate(Page.MARKET)
+        }
+        Modal({ close() }, 540.dp) {
+            Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Filled.CheckCircle, null, Modifier.size(60.dp), tint = Color(0xFF16A34A))
+                Spacer(Modifier.height(10.dp))
+                Text("Purchase Successful!", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                Spacer(Modifier.height(8.dp))
+                Text("Order reference: ${order.orderNumber}", fontWeight = FontWeight.Bold, color = Palette.Forest)
+                Spacer(Modifier.height(14.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFF8FAFC)).padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    order.items.forEach { item ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(item.productName, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                            Text("× ${item.qty}", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    HorizontalDivider(color = Palette.Border)
+                    SummaryRow("Total Amount", "$PESO${money(order.totalAmount)}", true)
+                    SummaryRow("Payment Method", order.paymentMethod)
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    SecondaryButton("View Order Details", Modifier.weight(1f)) {
+                        s.purchaseConfirmationOrder = null
+                        s.selectedOrderForView = order
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    TextAction("Back") { close() }
+                }
+            }
+        }
     }
 }
-
 @Composable
 private fun CartStep(s: AppState) {
     if (s.cart.isEmpty()) {
@@ -134,13 +176,14 @@ private data class PayOption(val method: String, val label: String, val icon: Im
 
 @Composable
 private fun PaymentStep(s: AppState) {
+    LaunchedEffect(s.paymentMethod) {
+        if (s.paymentMethod !in CHECKOUT_PAYMENT_METHODS) s.paymentMethod = CHECKOUT_PAYMENT_METHODS.first()
+    }
     GlassCard {
-        H2("Select Payment Method"); Sub("Pay securely via GCash, Bank Transfer, or Cash on Delivery")
+        H2("Select Payment Method"); Sub("Cash on Delivery")
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             listOf(
-                PayOption("GCash", "GCash e-Wallet", Icons.Outlined.AccountBalanceWallet, "Instant QR code or mobile number transfer"),
-                PayOption("Bank Transfer", "Bank Transfer", Icons.Outlined.AccountBalance, "BDO, BPI, or UnionBank online transfer"),
                 PayOption("Cash on Delivery", "Cash on Delivery", Icons.Outlined.Payments, "Pay rider directly upon vegetable arrival"),
             ).forEach { o ->
                 val sel = s.paymentMethod == o.method
@@ -155,191 +198,17 @@ private fun PaymentStep(s: AppState) {
         }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF8FAFC)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            when (s.paymentMethod) {
-                "GCash" -> {
-                    AsyncImage(s.images.gcashQrMockup, Modifier.size(130.dp).clip(RoundedCornerShape(12.dp)), contentDescription = "GCash QR Code")
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text("GCash Merchant Account", fontWeight = FontWeight.ExtraBold)
-                        Text("Merchant Name: ${s.setting("gcash_merchant_name")}", fontSize = 13.sp)
-                        Text("Mobile: ${s.setting("gcash_number")}", fontSize = 13.sp)
-                        Text("Scan QR or enter mobile number. Amount: $PESO${money(s.cartTotal)}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Palette.Forest)
-                    }
-                }
-                "Bank Transfer" -> Column {
-                    Text("Bank Transfer Account Details", fontWeight = FontWeight.ExtraBold)
-                    Text("Bank: ${s.setting("bank_name")}", fontSize = 13.sp)
-                    Text("Account Name: ${s.setting("bank_account_name")}", fontSize = 13.sp)
-                    Text("Account Number: ${s.setting("bank_account_number")}", fontSize = 13.sp)
-                }
-                else -> Column {
-                    Text("Cash on Delivery (COD) Selected", fontWeight = FontWeight.ExtraBold)
-                    Text("Please prepare exact cash amount of $PESO${money(s.cartTotal)} upon arrival of the delivery rider.", fontSize = 13.sp)
-                }
+            Column {
+                Text("Cash on Delivery (COD) Selected", fontWeight = FontWeight.ExtraBold)
+                Text("Please prepare exact cash amount of $PESO${money(s.cartTotal)} upon arrival of the delivery rider.", fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(18.dp))
-        Row {
-            SecondaryButton("Back to Delivery") { s.checkoutStep = 2 }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            PrimaryButton("Confirm and Place Order · $PESO${money(s.cartTotal)}") { s.placeOrder() }
-        }
-    }
-}
-
-@Composable
-private fun ConfirmStep(s: AppState) {
-    GlassCard(Modifier.fillMaxWidth(), padding = 36.dp) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Filled.CheckCircle, null, Modifier.size(64.dp), tint = Color(0xFF16A34A))
-            Spacer(Modifier.height(10.dp))
-            H1("Mabuhay! Order Confirmed")
-            Spacer(Modifier.height(6.dp))
-            Text("Thank you for directly supporting local farmers! Your fresh organic vegetables and products have been queued for dispatch.", textAlign = TextAlign.Center, color = Color(0xFF334155))
-            Spacer(Modifier.height(12.dp))
-            Pill("Order Reference: #${s.lastOrderReference}")
-            Spacer(Modifier.height(6.dp))
-            Text("Payment Method: ${s.lastOrderPaymentMethod} • Total Paid: $PESO${money(s.lastOrderTotal)}", fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton("Track Delivery Route Now →", icon = Icons.Outlined.LocalShipping) { s.checkoutStep = 1; s.navigate(Page.ORDER_TRACKING) }
-                SecondaryButton("Print Official Receipt", icon = Icons.Outlined.Print) { (s.lastPlacedOrder ?: s.visibleOrders.firstOrNull())?.let(s::printOrderReceipt) }
-                SecondaryButton("Return to Marketplace") { s.checkoutStep = 1; s.navigate(Page.MARKET) }
-                SecondaryButton("View All Bookings") { s.navigate(Page.MY_BOOKINGS) }
-            }
-        }
-    }
-}
-
-@Composable
-fun OrderTrackingPage(s: AppState) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Pill("Real-Time Farm Logistics Tracker")
-            Spacer(Modifier.height(6.dp)); H1("Delivery Tracking")
-            Sub("Monitor the live route of your fresh organic farm harvest directly from our partner farms to your doorstep.")
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SecondaryButton("Print Receipt", icon = Icons.Outlined.Print) { s.currentTrackedOrder()?.let(s::printOrderReceipt) }
-            SecondaryButton("Marketplace") { s.navigate(Page.MARKET) }
-            SecondaryButton("My Bookings") { s.navigate(Page.MY_BOOKINGS) }
-        }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
-        Label("Select Order to Track:"); Spacer(Modifier.width(10.dp))
-        if (s.visibleOrders.isEmpty()) Sub("You have no orders yet.")
-        s.visibleOrders.forEach { o ->
-            val sel = s.activeTrackingOrderId == o.id || s.activeTrackingOrderId == o.orderNumber
-            Row(Modifier.padding(end = 8.dp).clip(RoundedCornerShape(12.dp)).background(if (sel) Palette.Forest else Color.White)
-                .border(1.dp, Palette.Border, RoundedCornerShape(12.dp)).clickable { s.activeTrackingOrderId = o.id }.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text("#${o.orderNumber}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (sel) Color.White else Palette.Deep)
-                Spacer(Modifier.width(8.dp)); StatusPill(o.fulfillmentStatus)
-            }
-        }
-    }
-    val o = s.currentTrackedOrder() ?: return
-    // Highest delivery step reached (0 = placed … 3 = out for delivery, 4 = received by the tourist).
-    val reached = o.deliverySteps.indexOfLast { it.completed }.coerceAtLeast(0)
-    GlassCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("#${o.orderNumber}", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
-                    Spacer(Modifier.width(10.dp)); Sub(o.orderDate); Spacer(Modifier.width(10.dp))
-                    StatusPill(if (o.isReceivedByUser) "Delivered" else o.fulfillmentStatus)
-                }
-                Text("📍 Destination: ${o.customerAddress}", fontSize = 13.sp, color = Color(0xFF334155))
-            }
-            Column(Modifier.clip(RoundedCornerShape(14.dp)).background(if (o.isReceivedByUser) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)).padding(12.dp)) {
-                Text(when {
-                    o.isReceivedByUser -> "Package Confirmed Received"
-                    reached >= 3 -> "Out for Delivery"
-                    reached == 2 -> "Picked Up by Courier"
-                    reached == 1 -> "Packed at the Farm"
-                    else -> "Waiting for the Farm to Pack"
-                }, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                Text(if (o.isReceivedByUser) (o.receivedAt ?: "Handed over in good condition") else (o.estimatedArrival ?: "ETA not yet available"), fontSize = 11.sp)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF8FAFC)).padding(14.dp)) {
-                Row { Label("Assigned Courier & Rider"); Spacer(Modifier.weight(1f)); Text(o.courierName ?: "Not yet assigned", fontSize = 11.sp, color = Palette.Forest) }
-                Spacer(Modifier.height(6.dp))
-                Text("🚚 ${o.riderName ?: "Rider not yet assigned"}", fontWeight = FontWeight.ExtraBold)
-                o.riderVehicle?.let { Sub(it) }
-                Row(verticalAlignment = Alignment.CenterVertically) { Text("📞 ${o.riderPhone ?: "—"}", fontSize = 12.sp); Spacer(Modifier.width(8.dp)); Pill("Verified Carrier") }
-            }
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4)).padding(14.dp)) {
-                Label("Current Courier Coordinates")
-                Spacer(Modifier.height(6.dp))
-                Text("🧭 ${o.currentLocation ?: "Location not yet reported"}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Text("Tracking No: ${o.trackingNumber ?: "—"}", fontSize = 12.sp)
-                Text("Estimated Arrival: ${o.estimatedArrival ?: "Not yet estimated"}", fontSize = 12.sp, color = Palette.Forest)
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Label("Live Route: ${o.items.firstNotNullOfOrNull { i -> s.products.firstOrNull { it.id == i.productId }?.farmOrigin } ?: "Partner Farm"} → ${o.customerAddress.split(",").getOrNull(1)?.trim() ?: o.customerAddress.ifBlank { "Destination" }}"); Spacer(Modifier.weight(1f)); Pill("Express Farm Corridor")
-        }
-        Spacer(Modifier.height(10.dp))
-        Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xFFE2E8F0))) {
-            Box(Modifier.fillMaxWidth(if (o.isReceivedByUser) 1f else reached / o.deliverySteps.lastIndex.coerceAtLeast(1).toFloat()).fillMaxHeight().background(Palette.Forest))
-        }
-        Spacer(Modifier.height(8.dp))
-        Row {
-            listOf("Farm Packed" to "At the farm", "Picked Up" to "With courier", "Out for Delivery" to "En Route",
-                "Customer Received" to if (o.isReceivedByUser) "Confirmed" else "Pending").forEachIndexed { i, (t, sub) ->
-                val done = if (i == 3) o.isReceivedByUser else reached >= i + 1
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(28.dp).clip(CircleShape).background(if (done) Palette.Forest else Color(0xFFE2E8F0)), contentAlignment = Alignment.Center) {
-                        if (done) Icon(Icons.Filled.Check, null, Modifier.size(16.dp), tint = Color.White) else Text("${i + 1}", fontWeight = FontWeight.Bold)
-                    }
-                    Text(t, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(sub, fontSize = 10.sp, color = Palette.Muted)
-                }
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        H2("Logistics Milestones & Checkpoints")
-        o.deliverySteps.forEachIndexed { i, st ->
-            Row(Modifier.padding(vertical = 6.dp)) {
-                Box(Modifier.size(26.dp).clip(CircleShape).background(if (st.completed) Palette.Forest else Color(0xFFE2E8F0)), contentAlignment = Alignment.Center) {
-                    if (st.completed) Icon(Icons.Filled.Check, null, Modifier.size(14.dp), tint = Color.White) else Text("${i + 1}", fontSize = 11.sp)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Row { Text(st.title, Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 13.sp); Text(st.timestamp, fontSize = 11.sp, color = Palette.Muted) }
-                    Sub(st.location)
-                    st.notes?.let { Pill(it, Color(0xFFF0FDF4), Color(0xFF166534)) }
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        if (o.isReceivedByUser) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFDCFCE7)).padding(16.dp)) {
-                Text("✓ You have confirmed receipt of this order", fontWeight = FontWeight.ExtraBold, color = Color(0xFF166534))
-                Text("Verified received on ${o.receivedAt ?: "—"}. The farm host has been notified of the successful delivery!", fontSize = 12.sp)
-            }
-        } else if (o.fulfillmentStatus == "Cancelled") {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFEE2E2)).padding(16.dp)) {
-                Text("This order was cancelled. Items were returned to the farm's stock.", fontWeight = FontWeight.Bold, color = Palette.Red)
-            }
-        } else {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFFBEB)).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Have you received your fresh produce?", fontWeight = FontWeight.ExtraBold)
-                    Sub("Once the courier delivers your package, click the button to verify receipt and notify the farmer.")
-                }
-                if (s.ownsOrder(o) && reached >= 3) PrimaryButton("Confirm Order Received", icon = Icons.Filled.Check) { s.confirmOrderReceived(o.id) }
-                else if (s.ownsOrder(o)) Pill("Available once out for delivery", Color(0xFFFEF3C7), Color(0xFF92400E))
-                if (s.canCancelOrder(o)) {
-                    Spacer(Modifier.width(8.dp))
-                    SecondaryButton("Cancel Order", icon = Icons.Outlined.Cancel, color = Color(0xFFB45309)) {
-                        s.confirm("Cancel order #${o.orderNumber}?", "You can cancel until the farm starts packing.", "Yes, Cancel Order") { s.cancelOrder(o.id) }
-                    }
-                }
-            }
+            PrimaryButton("Confirm and Place Order · $PESO${money(s.cartTotal)}", enabled = !s.isPlacingOrder) { s.placeOrder() }
+            Spacer(Modifier.width(12.dp))
+            TextAction("Back") { s.checkoutStep = 2 }
         }
     }
 }

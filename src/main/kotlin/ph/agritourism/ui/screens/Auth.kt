@@ -2,11 +2,7 @@ package ph.agritourism.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -21,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,8 +64,13 @@ private fun AuthLayout(s: AppState, form: @Composable ColumnScope.() -> Unit) {
                 }
             }
         }
-        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 48.dp, vertical = 36.dp),
-            verticalArrangement = Arrangement.Center, content = form)
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 48.dp, vertical = 28.dp),
+                verticalArrangement = Arrangement.Center, content = form)
+            Box(Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 12.dp)) {
+                TextAction("Back", Modifier.align(Alignment.CenterEnd).testTag("back-to-opening")) { s.navigate(Page.HOME) }
+            }
+        }
     }
 }
 
@@ -76,26 +78,6 @@ private fun AuthLayout(s: AppState, form: @Composable ColumnScope.() -> Unit) {
 private fun Brand() = Row(verticalAlignment = Alignment.CenterVertically) {
     AsyncImage("res:icons/pwa-192x192.png", Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)))
     Spacer(Modifier.width(10.dp)); Text("AgriTourism Philippines", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
-}
-
-@Composable
-private fun RoleTile(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val pressed by interaction.collectIsPressedAsState()
-    val bg by animateColorAsState(if (selected) Palette.Forest else if (hovered) Palette.Mint else Color.White, tween(200), label = "role-bg")
-    val fg by animateColorAsState(if (selected) Color.White else Palette.Ink, tween(200), label = "role-fg")
-    val border by animateColorAsState(if (selected || hovered) Palette.Forest else Palette.Border, tween(200), label = "role-border")
-    val scale by animateFloatAsState(when { pressed -> 0.95f; selected -> 1.03f; else -> 1f }, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium), label = "role-s")
-    val iconScale by animateFloatAsState(if (selected) 1.2f else 1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium), label = "role-i")
-    Column(modifier.graphicsLayer { scaleX = scale; scaleY = scale }.clip(RoundedCornerShape(14.dp)).background(bg)
-        .border(1.dp, border, RoundedCornerShape(14.dp)).hoverable(interaction).handCursor()
-        .clickable(interaction, LocalIndication.current, onClick = onClick).padding(horizontal = 4.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, null, Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale }, tint = if (selected) Color.White else Palette.Forest)
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = fg, maxLines = 1, softWrap = false)
-    }
 }
 
 private val EMAIL_RE = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
@@ -178,18 +160,10 @@ fun LoginPage(s: AppState) {
         Spacer(Modifier.height(5.dp))
         Field("", s.loginPassword, { s.loginPassword = it }, placeholder = "Enter your password", password = true, icon = Icons.Outlined.Lock, onSubmit = submit)
         Spacer(Modifier.height(16.dp))
-        Label("Log in as"); Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf(Triple(Role.USER, "Tourist", Icons.Outlined.Explore), Triple(Role.FARMER, "Farmer", Icons.Outlined.Spa), Triple(Role.ADMIN, "Admin", Icons.Outlined.VerifiedUser)).forEach { (r, l, ic) ->
-                RoleTile(l, ic, s.loginRoleSelect == r, Modifier.weight(1f)) { s.selectLoginRole(r) }
-            }
-        }
         ErrorBanner(s.loginError)
         Spacer(Modifier.height(18.dp))
-        PrimaryButton("Log In to Dashboard", Modifier.fillMaxWidth(), Icons.AutoMirrored.Outlined.Login, enabled = canSubmit) { submit() }
-        Spacer(Modifier.height(6.dp))
-        Text("Tip: press Enter to log in", Modifier.fillMaxWidth(), fontSize = 11.sp, color = Palette.Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(6.dp))
+        PrimaryButton("Log In", Modifier.fillMaxWidth(), Icons.AutoMirrored.Outlined.Login, enabled = canSubmit) { submit() }
+        Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Sub("Don't have an account yet?"); TextButton({ s.navigate(Page.SIGNUP) }, Modifier.handCursor()) { Text("Create Account", fontWeight = FontWeight.ExtraBold) }
         }

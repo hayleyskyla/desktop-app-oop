@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ph.agritourism.model.Booking
 import ph.agritourism.model.FarmerProfile
+import ph.agritourism.model.PAY_AT_FARM_PAYMENT_METHOD
 import ph.agritourism.model.Receipt
 import ph.agritourism.ui.*
 
@@ -83,7 +84,7 @@ internal fun FarmerStoryModal(s: AppState, f: FarmerProfile) {
         Box(Modifier.fillMaxWidth().height(240.dp)) {
             AsyncImage(f.farmBannerUrl, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE60B2512)))))
-            IconButton(close, Modifier.align(Alignment.TopEnd).padding(10.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.9f))) { Icon(Icons.Filled.Close, "Close") }
+            TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep) { close() }
             Row(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(f.photoUrl, 90.dp); Spacer(Modifier.width(14.dp))
                 Column {
@@ -98,19 +99,19 @@ internal fun FarmerStoryModal(s: AppState, f: FarmerProfile) {
                 Label("Farmer Philosophy & Words")
                 Text("\"${f.storyQuote}\"", fontStyle = FontStyle.Italic, fontSize = 14.sp, color = Palette.Deep)
                 Spacer(Modifier.height(6.dp))
-                Text("🏅 ${f.yearsExperience} Years Dedicated to Agriculture • ${f.roleTitle}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("${f.yearsExperience} Years Dedicated to Agriculture • ${f.roleTitle}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.AutoMirrored.Outlined.MenuBook, null, tint = Palette.Forest); Spacer(Modifier.width(6.dp)); H2("The Farmer's Journey & Heritage") }
             Text(f.fullBiography, fontSize = 13.sp, color = Color(0xFF334155))
             Text(f.farmingPhilosophy, fontSize = 13.sp, fontStyle = FontStyle.Italic, color = Palette.Forest)
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Column(Modifier.weight(1f)) { Label("Official Certifications"); f.certifications.forEach { Text("✅ $it", fontSize = 12.sp) } }
-                Column(Modifier.weight(1f)) { Label("Eco-Friendly Practices"); f.sustainablePractices.forEach { Text("🌱 $it", fontSize = 12.sp) } }
+                Column(Modifier.weight(1f)) { Label("Official Certifications"); f.certifications.forEach { Text(it, fontSize = 12.sp) } }
+                Column(Modifier.weight(1f)) { Label("Eco-Friendly Practices"); f.sustainablePractices.forEach { Text(it, fontSize = 12.sp) } }
             }
             Label("Farm Landscape & Harvest Photos")
             Gallery(f.gallery)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("🥕 Harvested Produce Available Now", fontWeight = FontWeight.ExtraBold, color = Palette.Deep); Spacer(Modifier.weight(1f)); Sub("Direct from ${f.name}'s fields")
+                Text("Harvested Produce Available Now", fontWeight = FontWeight.ExtraBold, color = Palette.Deep); Spacer(Modifier.weight(1f)); Sub("Direct from ${f.name}'s fields")
             }
             Grid(s.products.filter { it.id in f.productIds }, 3, 10.dp) { p ->
                 val inCart = s.cart.firstOrNull { it.product.id == p.id }?.quantity ?: 0
@@ -130,7 +131,7 @@ internal fun FarmerStoryModal(s: AppState, f: FarmerProfile) {
                 PrimaryButton("Book Tour at ${f.farmName}", Modifier.weight(1f), Icons.Outlined.Explore) {
                     s.selectedTour = s.tours.firstOrNull { it.id == f.tourId } ?: s.tours.first(); s.selectedFarmerForModal = null; s.isTourModalOpen = true
                 }
-                SecondaryButton("Close Profile") { close() }
+                TextAction("Close") { close() }
             }
         }
     }
@@ -169,7 +170,7 @@ internal fun ReceiptModal(s: AppState, r: Receipt) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("Print Official Receipt (PDF / Paper)", Modifier.weight(1f), Icons.Outlined.Print) { Printing.openHtml("${r.receiptNumber}.html", Printing.receiptHtml(r)) }
-                SecondaryButton("Close") { close() }
+                TextAction("Close") { close() }
             }
         }
     }
@@ -178,12 +179,6 @@ internal fun ReceiptModal(s: AppState, r: Receipt) {
 @Composable
 internal fun TicketModal(s: AppState, b: Booking) {
     val close = { s.selectedBookingForTicket = null }
-    val download: () -> Unit = {
-        Printing.saveHtmlAs("AgriTourism-Ticket-${b.bookingCode}.html", Printing.ticketHtml(b))?.let {
-            s.showToast("Ticket pass \"${b.bookingCode}\" saved to ${it.absolutePath}")
-        }
-    }
-    val print: () -> Unit = { Printing.openHtml("ticket-${b.bookingCode}.html", Printing.ticketHtml(b, autoPrint = true)) }
     Modal(close, 700.dp) {
         Row(Modifier.fillMaxWidth().background(Palette.Deep).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.ConfirmationNumber, null, tint = Color(0xFF86EFAC)); Spacer(Modifier.width(10.dp))
@@ -191,29 +186,17 @@ internal fun TicketModal(s: AppState, b: Booking) {
                 Text("PHILIPPINE AGRITOURISM", color = Color(0xFF86EFAC), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                 Text("Official Digital Tour Pass & E-Ticket", color = Color.White, fontWeight = FontWeight.ExtraBold)
             }
-            TextButton(download) { Text("Save / Download", color = Color.White) }
-            TextButton(print) { Text("Print Ticket", color = Color.White) }
-            IconButton(close) { Icon(Icons.Filled.Close, "Close", tint = Color.White) }
         }
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFFBEB)).padding(14.dp)) {
-                Text("Do you want to save this ticket or do you want to print this ticket?", fontWeight = FontWeight.ExtraBold)
-                Sub("You can save and download this ticket directly to your computer for offline turnstile check-in, or print a physical copy right now.")
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PrimaryButton("Save / Download Digital Ticket", icon = Icons.Outlined.Download, onClick = download)
-                    SecondaryButton("Print Ticket", icon = Icons.Outlined.Print, onClick = print)
-                }
-            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Pill("Pass Reference: ${b.bookingCode}", Palette.Deep, Color.White)
                     Text(b.farmName, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
-                    Text("🧭 ${b.activity}", fontSize = 13.sp, color = Palette.Forest)
+                    Text(b.activity, fontSize = 13.sp, color = Palette.Forest)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Label("Total Admission Paid"); Text("$PESO${money(b.totalAmount)}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
-                    Sub("Paid via ${b.paymentMethod ?: "GCash"}")
+                    Sub("Payment method: ${b.paymentMethod ?: PAY_AT_FARM_PAYMENT_METHOD}")
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -223,7 +206,7 @@ internal fun TicketModal(s: AppState, b: Booking) {
                 InfoTile("Party Size", "${b.participants} Guests", Icons.Outlined.Groups, Modifier.weight(1f))
             }
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFF0FDF4)).padding(14.dp)) {
-                Row { Text("🧭 Assigned Agro-Guide: ${b.assignedGuide ?: "To be assigned"}", Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.Bold); Pill("Gate 1 Welcome Pavilion", Color.White) }
+                Row { Text("Assigned Agro-Guide: ${b.assignedGuide ?: "To be assigned"}", Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.Bold); Pill("Gate 1 Welcome Pavilion", Color.White) }
                 Spacer(Modifier.height(6.dp))
                 Text("Pass Inclusions: Welcome native honey-lemonade drink, guided educational trail walk, sanitized harvesting basket, farm safety sun hat, and free parking access.", fontSize = 12.sp)
             }
@@ -233,16 +216,17 @@ internal fun TicketModal(s: AppState, b: Booking) {
                     Label("Gate Turnstile Instructions")
                     Text("Present this digital ticket on your screen or printed paper at the farm gate scanner. Arrive 15 minutes prior to your time slot.", fontSize = 12.sp)
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Outlined.QrCode2, null, Modifier.size(64.dp), tint = Palette.Deep)
-                    Text("||| |||| | ||| ||||", fontFamily = FontFamily.Monospace, fontSize = 11.sp); Text("VALIDATED ENTRY", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
-                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton("Save / Download Digital Pass", Modifier.weight(1f), Icons.Outlined.Download, onClick = download)
-                SecondaryButton("Print Online Ticket Pass", icon = Icons.Outlined.Print, onClick = print)
-                SecondaryButton("Close") { close() }
+                SecondaryButton("Save Ticket") {
+                    if (Printing.saveHtmlAs("AgriTourism-${b.bookingCode}.html", Printing.ticketHtml(b)) != null) {
+                        s.showToast("Ticket saved.")
+                    }
+                }
+                PrimaryButton("Print Ticket") {
+                    Printing.openHtml("AgriTourism-${b.bookingCode}.html", Printing.ticketHtml(b, autoPrint = true))
+                }
+                TextAction("Close") { close() }
             }
         }
     }

@@ -13,14 +13,26 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
 enum class Page {
     DASHBOARD, HOME, FARM_DETAIL, FRUIT_PICKING, MARKET, FARMERS_STORIES, MY_BOOKINGS, CART_CHECKOUT,
-    ORDER_TRACKING, FARMER_ORDERS, FARMER_PRODUCTS, FARMER_PROFILE, SIGNUP, LOGIN, SQL_STUDIO, FARM_SETUP, PLATFORM_SETTINGS, HELP
+    WISHLIST, MY_PURCHASES, FARMER_ORDERS, FARMER_PRODUCTS, FARMER_PROFILE, SIGNUP, LOGIN, FARM_SETUP,
+    PLATFORM_SETTINGS, ADMIN_TOURS, ADMIN_FRUIT_PICKING, ADMIN_PRODUCTS, HELP
 }
+
+enum class SearchResultType { FARM, TOUR, ORCHARD, PRODUCT }
+
+data class CatalogSearchResult(
+    val type: SearchResultType,
+    val id: Long,
+    val title: String,
+    val subtitle: String,
+    val image: String,
+)
 
 /** Picture-and-description preview of a catalog item, shown to guests on the opening page. */
 data class CatalogPreview(val image: String, val tag: String, val title: String, val description: String, val details: List<Pair<String, String>> = emptyList())
@@ -29,9 +41,11 @@ enum class ShowcaseCategory { ALL, PLACES, PRODUCTS, ORCHARDS }
 
 const val PESO = "₱"
 
-/** Fulfillment statuses a farm moves an order through, with their button labels. */
-val ORDER_STATUSES = listOf("Pending Packing" to "Packing", "Packed" to "Packed", "Dispatched" to "Dispatch",
-    "Out for Delivery" to "Out for Delivery", "Delivered" to "Delivered")
+/** Marketplace order states; delivery milestones are intentionally not tracked. */
+val ORDER_STATUSES = listOf("Pending", "Confirmed", "Cancelled")
+val TOUR_PAYMENT_METHODS = listOf(PAY_AT_FARM_PAYMENT_METHOD)
+val WALK_IN_PAYMENT_METHODS = listOf(PAY_AT_FARM_PAYMENT_METHOD)
+val CHECKOUT_PAYMENT_METHODS = listOf(COD_PAYMENT_METHOD)
 
 private val STAMP = DateTimeFormatter.ofPattern("MMM d, yyyy · hh:mm a", Locale.ENGLISH)
 fun nowStamp(): String = LocalDateTime.now().format(STAMP)
@@ -43,6 +57,7 @@ fun parseTourDate(d: String): LocalDate? = parseDate(d)
 fun parseOrderDate(d: String): LocalDate? = parseTourDate(d.substringBefore("·"))
 
 data class MonthPoint(val label: String, val value: Double)
+data class ProductSalesMetric(val productName: String, val quantity: Int, val revenue: Double)
 
 /** Buckets dated values into the last [months] calendar months, ending at the later of today or the newest entry. */
 fun monthlySeries(entries: List<Pair<LocalDate, Double>>, months: Int = 6): List<MonthPoint> {
@@ -52,6 +67,20 @@ fun monthlySeries(entries: List<Pair<LocalDate, Double>>, months: Int = 6): List
     return (months - 1 downTo 0).map { i ->
         val ym = end.minusMonths(i.toLong())
         MonthPoint(ym.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH), sums[ym] ?: 0.0)
+    }
+}
+
+fun cumulativeMonthlyCount(dates: List<LocalDate>, months: Int = 6): List<MonthPoint> {
+    require(months > 0) { "At least one month is required." }
+    val now = java.time.YearMonth.now()
+    val end = dates.maxOfOrNull { java.time.YearMonth.from(it) }?.takeIf { it.isAfter(now) } ?: now
+    val start = end.minusMonths((months - 1).toLong())
+    val counts = dates.groupingBy { java.time.YearMonth.from(it) }.eachCount()
+    var total = dates.count { java.time.YearMonth.from(it).isBefore(start) }
+    return (0 until months).map { offset ->
+        val month = start.plusMonths(offset.toLong())
+        total += counts[month] ?: 0
+        MonthPoint(month.month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH), total.toDouble())
     }
 }
 
@@ -88,7 +117,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     // login
     var loginEmail by mutableStateOf("")
     var loginPassword by mutableStateOf("")
-    var loginRoleSelect by mutableStateOf(Role.USER)
+    var loginRole by mutableStateOf(Role.USER)
     var loginError by mutableStateOf<String?>(null)
 
     // selections
@@ -100,12 +129,12 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     // tour/fruit reservation inputs
     var tourDate by mutableStateOf(LocalDate.now().plusDays(7).toString())
     var tourTime by mutableStateOf("")
-    var tourGuests by mutableStateOf(2)
-    var tourPaymentMethod by mutableStateOf("GCash")
+    var tourGuests by mutableStateOf(1)
+    var tourPaymentMethod by mutableStateOf(PAY_AT_FARM_PAYMENT_METHOD)
     var fruitDate by mutableStateOf(LocalDate.now().plusDays(7).toString())
     var fruitTime by mutableStateOf("")
     var fruitGuests by mutableStateOf(2)
-    var fruitPaymentMethod by mutableStateOf("GCash")
+    var fruitPaymentMethod by mutableStateOf(PAY_AT_FARM_PAYMENT_METHOD)
 
     // persisted collections
     /** Every product including deleted (archived) ones, so old orders still find their farm. */
@@ -114,6 +143,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var bookings by mutableStateOf(db.bookings())
     var farmerOrders by mutableStateOf(db.orders())
     var notifications by mutableStateOf(db.notifications())
+    var userAccounts by mutableStateOf(db.users())
+    var adminListingFarmId by mutableStateOf<Int?>(null)
     var favoriteIds by mutableStateOf(emptySet<Long>())
     var cart by mutableStateOf(emptyList<CartItem>())
     /** Cart items the tourist unticked; everything else is bought at checkout (new items start ticked). */
@@ -125,11 +156,13 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var contactPhone by mutableStateOf("")
     var deliveryAddress by mutableStateOf("")
     var deliveryNotes by mutableStateOf("")
-    var paymentMethod by mutableStateOf("GCash")
+    var paymentMethod by mutableStateOf(COD_PAYMENT_METHOD)
     var lastOrderTotal by mutableStateOf(0.0)
     var lastOrderReference by mutableStateOf("")
-    var lastOrderPaymentMethod by mutableStateOf("GCash")
+    var lastOrderPaymentMethod by mutableStateOf(COD_PAYMENT_METHOD)
     var lastPlacedOrder by mutableStateOf<FarmerOrder?>(null)
+    var purchaseConfirmationOrder by mutableStateOf<FarmerOrder?>(null)
+    var isPlacingOrder by mutableStateOf(false)
 
     // overlays
     var isNotificationsOpen by mutableStateOf(false)
@@ -137,7 +170,13 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var isProfileModalOpen by mutableStateOf(false)
     var isAddProductModalOpen by mutableStateOf(false)
     /** A pending "are you sure?" question; the dialog runs [Confirm.action] on Yes. */
-    data class Confirm(val title: String, val message: String, val yesLabel: String, val action: () -> Unit)
+    data class Confirm(
+        val title: String,
+        val message: String,
+        val yesLabel: String,
+        val action: () -> Unit,
+        val cancelLabel: String = "Keep",
+    )
     var pendingConfirm by mutableStateOf<Confirm?>(null)
     var editingTour by mutableStateOf<FarmTour?>(null)
     var editingOrchard by mutableStateOf<FruitPickingItem?>(null)
@@ -152,8 +191,9 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var reviewingBooking by mutableStateOf<Booking?>(null)
     var deletingBookingId by mutableStateOf<Long?>(null)
     var selectedOrderForView by mutableStateOf<FarmerOrder?>(null)
-    var selectedOrderForTracking by mutableStateOf<FarmerOrder?>(null)
     var selectedFarmerForModal by mutableStateOf<FarmerProfile?>(null)
+    var editingFarmerStory by mutableStateOf<FarmerProfile?>(null)
+    var selectedProductForView by mutableStateOf<Product?>(null)
     var selectedReceipt by mutableStateOf<Receipt?>(null)
     var catalogPreview by mutableStateOf<CatalogPreview?>(null)
     var isAddTourModalOpen by mutableStateOf(false)
@@ -161,13 +201,13 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var isEditStoryOpen by mutableStateOf(false)
     var toastMessage by mutableStateOf<String?>(null)
     private var toastJob: Job? = null
+    private val orderSubmissionInProgress = AtomicBoolean(false)
 
     // filters
     var marketFilter by mutableStateOf("All")
     var searchQuery by mutableStateOf("")
     var bookingsFilter by mutableStateOf("All")
     var ordersFilter by mutableStateOf("All")
-    var activeTrackingOrderId by mutableStateOf("")
     var farmerStoriesFilter by mutableStateOf("All")
     var farmerSearchQuery by mutableStateOf("")
     var currentSlide by mutableStateOf(0)
@@ -178,8 +218,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var newBookingActivity by mutableStateOf(tours.first().name)
     var newBookingDate by mutableStateOf(LocalDate.now().plusDays(7).toString())
     var newBookingTime by mutableStateOf("")
-    var newBookingGuests by mutableStateOf(2)
-    var newBookingPayment by mutableStateOf("Cash on Arrival")
+    var newBookingGuests by mutableStateOf(1)
+    var newBookingPayment by mutableStateOf(PAY_AT_FARM_PAYMENT_METHOD)
 
     // add product form
     var newProductName by mutableStateOf("")
@@ -242,17 +282,20 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         get() {
             if (!isLoggedIn) return emptyList()
             val mine = visibleBookings.map { it.id }.toSet()
+            // The generic "Booking" and "Tour Booking Confirmed" notices are retired; real
+            // acceptance/decline/cancellation updates use the booking_update label.
+            val current = notifications.filterNot { it.title == "Booking" || it.title == "Tour Booking Confirmed" }
             return when (userRole) {
-                Role.FARMER -> notifications.filter { it.targetRole == "farmer" && it.recipientEmail.equals(userEmail, true) }
+                Role.FARMER -> current.filter { it.targetRole == "farmer" && it.recipientEmail.equals(userEmail, true) }
                 // Tourists see broadcasts plus notifications addressed to them or about their own bookings.
-                Role.USER -> notifications.filter { n ->
+                Role.USER -> current.filter { n ->
                     n.targetRole == "tourist" && when {
                         n.recipientEmail != null -> n.recipientEmail.equals(userEmail, true)
                         n.bookingId != null -> n.bookingId in mine
                         else -> true
                     }
                 }
-                Role.ADMIN -> notifications
+                Role.ADMIN -> current
             }
         }
 
@@ -271,6 +314,26 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         get() = products.filter { p ->
             (marketFilter == "All" || p.category == marketFilter) &&
                 (p.name.contains(searchQuery, true) || p.farmOrigin.contains(searchQuery, true))
+        }
+
+    val searchResults: List<CatalogSearchResult>
+        get() {
+            val query = searchQuery.trim()
+            if (query.isEmpty()) return emptyList()
+            fun matches(vararg fields: String) = fields.any { it.contains(query, ignoreCase = true) }
+            return buildList {
+                farmers.filter { f ->
+                    matches(f.name, f.farmName, f.location, f.province, f.storyQuote, f.fullBiography, f.specialtyProduce.joinToString())
+                }.forEach { add(CatalogSearchResult(SearchResultType.FARM, it.id.toLong(), it.farmName, "${it.name} · ${it.location}", it.farmBannerUrl)) }
+                tours.filter { t ->
+                    matches(t.name, t.location, t.description, t.highlightTag, t.farmerName, t.activities.joinToString(), t.amenities.joinToString())
+                }.forEach { add(CatalogSearchResult(SearchResultType.TOUR, it.id.toLong(), it.name, "Farm tour · ${it.location}", it.imageUrl)) }
+                fruitPicking.filter { f ->
+                    matches(f.title, f.farmName, f.location, f.fruitName, f.description, f.seasonalFruits, f.seasonAvailability)
+                }.forEach { add(CatalogSearchResult(SearchResultType.ORCHARD, it.id.toLong(), it.title, "Fruit picking · ${it.location}", it.imageUrl)) }
+                products.filter { it.stock > 0 && matches(it.name, it.category, it.farmOrigin, it.description) }
+                    .forEach { add(CatalogSearchResult(SearchResultType.PRODUCT, it.id, it.name, "Available ${it.category.lowercase()} · ${it.farmOrigin}", it.imageUrl)) }
+            }
         }
 
     val displayName: String get() = currentUser?.fullName ?: "Guest"
@@ -301,8 +364,11 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         return o.items.filter { it.productId in mine }.sumOf { it.qty * it.unitPrice }
     }
 
+    /** Admin visibility only; changing a booking or order always requires the owning farmer. */
     fun canManageBooking(b: Booking) = isAdmin || (myFarmId != null && farmOf(b) == myFarmId)
     fun canManageOrder(o: FarmerOrder) = isAdmin || (myFarmId != null && myFarmId in farmsOf(o))
+    fun canActOnBooking(b: Booking) = isFarmer && canManageBooking(b)
+    fun canActOnOrder(o: FarmerOrder) = isFarmer && canManageOrder(o)
 
     val myTours: List<FarmTour> get() = if (isAdmin) tours else tours.filter { myFarmId != null && it.farmerId == myFarmId }
     val myOrchards: List<FruitPickingItem> get() = if (isAdmin) fruitPicking else fruitPicking.filter { myFarmId != null && it.farmerId == myFarmId }
@@ -335,26 +401,41 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     val farmProducts: List<Product>
         get() = when { isAdmin -> products; myFarmId != null -> products.filter { it.farmerId == myFarmId }; else -> emptyList() }
     val activeBookings: List<Booking> get() = visibleBookings.filter { it.status != "Cancelled" }
-    val openOrders: List<FarmerOrder> get() = visibleOrders.filter { it.fulfillmentStatus !in setOf("Delivered", "Cancelled") }
-    val totalRevenue: Double get() = visibleOrders.sumOf(::farmShare) + activeBookings.sumOf { it.totalAmount }
+    val openOrders: List<FarmerOrder> get() = visibleOrders.filter { it.fulfillmentStatus != "Cancelled" && !it.isReceivedByUser }
+    val totalRevenue: Double get() = visibleOrders.filter { it.fulfillmentStatus != "Cancelled" }.sumOf(::farmShare) + activeBookings.sumOf { it.totalAmount }
     val fulfillmentRate: Double get() = if (bookings.isEmpty()) 0.0 else bookings.count { it.status != "Cancelled" } * 100.0 / bookings.size
+    val orderStatusCounts: Map<String, Int>
+        get() = ORDER_STATUSES.associateWith { status -> farmerOrders.count { it.fulfillmentStatus == status } }
+    val productSales: List<ProductSalesMetric>
+        get() = farmerOrders.filter { it.fulfillmentStatus != "Cancelled" }
+            .flatMap { order ->
+                if (!isFarmer) order.items
+                else {
+                    val owned = allProducts.filter { it.farmerId == myFarmId }.map { it.id }.toSet()
+                    order.items.filter { it.productId in owned }
+                }
+            }
+            .groupBy { it.productName }
+            .map { (name, items) -> ProductSalesMetric(name, items.sumOf { it.qty }, items.sumOf { it.qty * it.unitPrice }) }
+            .sortedWith(compareByDescending<ProductSalesMetric> { it.quantity }.thenByDescending { it.revenue })
     val monthlyBookings: List<MonthPoint>
         get() = monthlySeries(bookings.mapNotNull { b -> parseTourDate(b.tourDate)?.let { it to 1.0 } })
+    val registeredUsersOverTime: List<MonthPoint>
+        get() = cumulativeMonthlyCount(userAccounts.mapNotNull { account ->
+            account.createdAt.takeIf { it.isNotBlank() }?.take(10)?.let(::parseTourDate)
+        })
     val monthlyRevenue: List<MonthPoint>
         get() = monthlySeries(
-            visibleOrders.mapNotNull { o -> parseOrderDate(o.orderDate)?.let { it to farmShare(o) } } +
+            visibleOrders.filter { it.fulfillmentStatus != "Cancelled" }.mapNotNull { o -> parseOrderDate(o.orderDate)?.let { it to farmShare(o) } } +
                 activeBookings.mapNotNull { b -> parseTourDate(b.tourDate)?.let { it to b.totalAmount.toDouble() } }
         )
     val myReviews: List<CustomerReview> get() = reviews.filter { r -> r.userEmail?.equals(userEmail, true) ?: r.author.equals(displayName, true) }
     val favoriteNames: List<String>
         get() = favoriteIds.mapNotNull { id ->
-            tours.firstOrNull { it.id.toLong() == id }?.name ?: fruitPicking.firstOrNull { it.id + 100L == id }?.title
+            allTours.firstOrNull { it.id.toLong() == id }?.name ?: allOrchards.firstOrNull { it.id + 100L == id }?.title
         }
 
-    val avatar: String
-        get() = currentUser?.avatarUrl?.takeIf { it.isNotBlank() }
-            ?: myFarm?.photoUrl?.takeIf { it.isNotBlank() }
-            ?: when (userRole) { Role.ADMIN -> images.adminAvatar; Role.FARMER -> images.juanAvatar; Role.USER -> images.mariaAvatar }
+    val avatar: String get() = currentUser?.avatarUrl.orEmpty()
 
     // ---------------------------------------------------------------- generic
     fun showToast(msg: String) {
@@ -367,8 +448,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     val isTourist get() = isLoggedIn && userRole == Role.USER
     val isFarmer get() = isLoggedIn && userRole == Role.FARMER
     val isAdmin get() = isLoggedIn && userRole == Role.ADMIN
-    /** Farm staff (farmer hosts and admins) manage bookings, orders and the catalog. */
-    val isStaff get() = isFarmer || isAdmin
+    /** Only farmer hosts may use the farm-side booking/order controls; admins are read-only. */
+    val isStaff get() = isFarmer
 
     fun ownsBooking(b: Booking) = isTourist && b.customerEmail.equals(userEmail, true)
     fun ownsOrder(o: FarmerOrder) = isTourist && o.customerEmail.equals(userEmail, true)
@@ -385,16 +466,18 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
 
     /** Which pages each role may open. */
     fun canAccess(p: Page): Boolean = when (p) {
-        Page.HOME, Page.LOGIN, Page.SIGNUP, Page.HELP -> true
+        Page.HOME, Page.LOGIN, Page.SIGNUP -> true
+        Page.HELP -> !isAdmin
         // Tourist pages need a login; guests only see the public catalog on the home page.
-        Page.FARM_DETAIL, Page.FRUIT_PICKING, Page.MARKET, Page.FARMERS_STORIES -> isTourist || isAdmin
+        Page.FARM_DETAIL, Page.FRUIT_PICKING, Page.MARKET, Page.FARMERS_STORIES -> isTourist
         Page.DASHBOARD, Page.MY_BOOKINGS -> isLoggedIn
+        Page.WISHLIST -> isTourist
+        Page.MY_PURCHASES -> isTourist
         Page.CART_CHECKOUT -> isTourist
-        Page.ORDER_TRACKING -> isTourist || isAdmin
-        Page.FARMER_ORDERS, Page.FARMER_PRODUCTS -> isStaff
+        Page.FARMER_ORDERS, Page.FARMER_PRODUCTS -> isFarmer
         Page.FARMER_PROFILE -> isFarmer
-        Page.SQL_STUDIO, Page.PLATFORM_SETTINGS -> isAdmin
-        Page.FARM_SETUP -> isAdmin || myFarmId != null
+        Page.PLATFORM_SETTINGS, Page.ADMIN_TOURS, Page.ADMIN_FRUIT_PICKING, Page.ADMIN_PRODUCTS -> isAdmin
+        Page.FARM_SETUP -> isFarmer && myFarmId != null
     }
 
     /** Returns true (and explains why) when the current user may NOT perform an action. */
@@ -417,9 +500,9 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
 
     fun openShowcase(c: ShowcaseCategory) { showcaseCategory = c; activePage = Page.HOME }
 
-    /** Opens a catalog item from the home page; guests and farmers get a picture & description preview. */
+    /** Only tourists can open booking modals; guests, farmers, and admins get a read-only preview. */
     private fun fromCatalog(preview: CatalogPreview, open: () -> Unit) {
-        if (isTourist || isAdmin) open() else catalogPreview = preview
+        if (isTourist) open() else catalogPreview = preview
     }
 
     fun openCatalogTour(t: FarmTour) = fromCatalog(CatalogPreview(t.imageUrl, t.location, t.name, t.description, listOf(
@@ -432,19 +515,39 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         "Season" to f.seasonAvailability, "Fruits" to f.seasonalFruits, "Rating" to "★ ${f.rating} (${f.reviewsCount} reviews)",
     ).filter { it.second.isNotBlank() })) { selectedFruit = f; isFruitModalOpen = true }
 
-    fun openCatalogProduct(p: Product) = fromCatalog(CatalogPreview(p.imageUrl, p.category, p.name, p.description, listOf(
-        "From" to p.farmOrigin, "Price" to "$PESO${money(p.discountedPrice)} ${p.unit}", "Stock" to if (p.stock > 0) "${p.stock} available" else "Sold out",
-    ))) { marketFilter = "All"; searchQuery = p.name; activePage = Page.MARKET }
+    fun openCatalogProduct(p: Product) {
+        selectedProductForView = p
+    }
 
-    fun reloadFromDb() {
-        allProducts = db.products(); bookings = db.bookings(); farmerOrders = db.orders()
+    fun openSearchResult(result: CatalogSearchResult) {
+        searchQuery = ""
+        when (result.type) {
+            SearchResultType.FARM -> farmers.firstOrNull { it.id.toLong() == result.id }?.let { selectedFarmerForModal = it }
+            SearchResultType.TOUR -> tours.firstOrNull { it.id.toLong() == result.id }?.let { selectedTour = it; isTourModalOpen = true }
+            SearchResultType.ORCHARD -> fruitPicking.firstOrNull { it.id.toLong() == result.id }?.let { selectedFruit = it; isFruitModalOpen = true }
+            SearchResultType.PRODUCT -> products.firstOrNull { it.id == result.id }?.let { selectedProductForView = it }
+        }
+    }
+
+    fun availableSlotsFor(type: String, id: Int): List<String> {
+        if (type == "tour" && tours.firstOrNull { it.id == id }?.bookingEnabled != true) return emptyList()
+        return slotsFor(type, id).filter { db.bookingScheduleError(type, id, it) == null }
+    }
+
+    /** Reloads every observable collection from SQLite without showing a toast (used by live dashboards). */
+    fun refreshFromDb() {
+        allProducts = db.products(); bookings = db.bookings(); farmerOrders = db.orders(); userAccounts = db.users()
         notifications = db.notifications(); reviews = db.reviews(); allTours = db.tours(); allOrchards = db.fruitPicking()
         farmers = db.farmers(); faqs = db.faqs(); settings = db.settings(); images = db.images(); guides = db.guides(); couriers = db.couriers(); timeSlots = db.timeSlots()
         currentUser = currentUser?.let { db.findUser(it.email) }
-        if (currentUser == null && isLoggedIn) { signOut(); return }
+        if ((currentUser == null || currentUser?.isActive == false) && isLoggedIn) { signOut(); return }
         currentUser?.let { userRole = it.role }
         favoriteIds = currentUser?.let { db.favorites(it.email) } ?: emptySet(); cart = loadCart()
         if (!canAccess(activePage)) activePage = Page.DASHBOARD
+    }
+
+    fun reloadFromDb() {
+        refreshFromDb()
         showToast("Reloaded data from SQLite database.")
     }
 
@@ -463,14 +566,20 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         userRole = Role.USER
         cart = emptyList(); cartUnselected = emptySet(); favoriteIds = emptySet()
         loginPassword = ""
-        checkoutStep = 1; lastPlacedOrder = null
+        loginRole = Role.USER
+        checkoutStep = 1; lastPlacedOrder = null; purchaseConfirmationOrder = null
         isNotificationsOpen = false
         selectedNotification = null
         isProfileModalOpen = false; isAddProductModalOpen = false; editingProductId = null; pendingConfirm = null; editingTour = null; editingOrchard = null; isAddBookingModalOpen = false
         selectedBookingForView = null; selectedBookingForTicket = null; editingBooking = null; deletingBookingId = null; reviewingBooking = null
-        selectedOrderForView = null; selectedOrderForTracking = null; selectedReceipt = null
+        selectedOrderForView = null; selectedReceipt = null; selectedProductForView = null; editingFarmerStory = null
+        adminListingFarmId = null
         isAddTourModalOpen = false; isAddOrchardModalOpen = false; isEditStoryOpen = false; catalogPreview = null
         activePage = Page.HOME
+        paymentMethod = COD_PAYMENT_METHOD
+        tourPaymentMethod = PAY_AT_FARM_PAYMENT_METHOD
+        fruitPaymentMethod = PAY_AT_FARM_PAYMENT_METHOD
+        newBookingPayment = PAY_AT_FARM_PAYMENT_METHOD
         showToast("Signed out successfully. Welcome to AgriTourism Philippines!")
     }
 
@@ -484,31 +593,28 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         myTours.firstOrNull()?.let { newBookingActivity = it.name }
         cart = loadCart(); cartUnselected = emptySet()
         checkoutStep = 1
-        activeTrackingOrderId = visibleOrders.firstOrNull()?.id ?: ""
         recipientName = u.fullName
         contactPhone = u.phone
         deliveryAddress = u.address
-        newBookingTime = myTours.firstOrNull()?.let { slotsFor("tour", it.id).firstOrNull() }.orEmpty()
+        newBookingTime = myTours.firstOrNull()?.let { availableSlotsFor("tour", it.id).firstOrNull() }.orEmpty()
     }
 
-    /** Verifies the email/password against the users table; returns true on success. */
+    /** Verifies the email/password against the users table and detects the role from the stored account. */
     fun login(): Boolean {
         val u = db.authenticate(loginEmail, loginPassword)
         loginError = when {
-            u == null -> "Incorrect email or password."
-            u.role != loginRoleSelect -> "This account is registered as ${u.role.subtitle}. Select that role to log in."
+            u == null -> if (db.findUser(loginEmail)?.isActive == false) {
+                "This account is disabled. Contact an administrator."
+            } else {
+                "Incorrect email or password."
+            }
             else -> null
         }
         if (u == null || loginError != null) return false
         startSession(u)
         showToast("Welcome back, ${u.fullName}! Logged in as ${u.role.key.uppercase()}.")
-        activePage = if (u.role == Role.FARMER) Page.FARMER_PROFILE else Page.DASHBOARD
+        activePage = Page.DASHBOARD
         return true
-    }
-
-    fun selectLoginRole(r: Role) {
-        loginRoleSelect = r
-        loginError = null
     }
 
     /** Creates the account in the users table; returns an error message or null on success. */
@@ -523,17 +629,73 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             db.findUser(email)!!
         }
         farmers = db.farmers()
+        userAccounts = db.users()
         startSession(u)
         showToast("Account created successfully! Welcome to AgriTourism, ${u.fullName}.")
         activePage = Page.DASHBOARD
         return null
     }
 
-    fun updateProfile(fullName: String, phone: String): String? {
+    /** Admin accounts are read-only apart from deleting Farmer/Tourist accounts. */
+    fun setUserAccountActive(id: Long, active: Boolean): String? =
+        "Administrator accounts cannot activate or deactivate accounts."
+
+    /** Deletes a tourist account while keeping historical bookings and orders intact. */
+    fun deleteTouristAccount(userId: Long): String? {
+        if (!isAdmin) return "Only administrators can delete accounts."
+        val account = userAccounts.firstOrNull { it.id == userId } ?: return "That account no longer exists."
+        if (account.role != Role.USER) return "Only tourist accounts can be deleted."
+        if (account.id == currentUser?.id) return "You cannot delete your own account."
+        if (!db.deleteTouristAccount(userId)) return "That account no longer exists."
+        userAccounts = db.users()
+        notifications = db.notifications()
+        showToast("${account.fullName}'s tourist account was deleted.")
+        return null
+    }
+
+    /**
+     * Permanently deletes a farmer account and its active farm data. Historical bookings,
+     * orders, and payments are retained; listings are archived so they disappear from the
+     * marketplace without orphaning their history.
+     */
+    fun deleteFarmerAccount(userId: Long): String? {
+        if (!isAdmin) return "Only administrators can delete accounts."
+        val account = userAccounts.firstOrNull { it.id == userId } ?: return "That account no longer exists."
+        if (account.role != Role.FARMER) return "Only farmer accounts can be deleted."
+        if (account.id == currentUser?.id) return "You cannot delete your own account."
+        if (!db.deleteFarmerAccount(userId)) return "That account no longer exists."
+        farmers = db.farmers(); userAccounts = db.users(); allTours = db.tours(); allOrchards = db.fruitPicking()
+        allProducts = db.products(); bookings = db.bookings(); farmerOrders = db.orders()
+        notifications = db.notifications(); guides = db.guides()
+        timeSlots = db.timeSlots(); reviews = db.reviews(); cart = loadCart()
+        showToast("${account.fullName}'s account and active farm data were permanently deleted.")
+        return null
+    }
+
+    /** Saves the signed-in account's own profile fields; `email` is optional for older callers. */
+    fun updateProfile(fullName: String, phone: String, address: String? = null, email: String? = null): String? {
         val u = currentUser ?: return "You are not logged in."
-        if (fullName.isBlank()) return "Name cannot be empty."
-        db.updateUserProfile(u.id, fullName, phone)
-        currentUser = db.findUser(u.email)
+        val trimmedName = fullName.trim()
+        if (trimmedName.isBlank()) return "Name cannot be empty."
+        val nextAddress = address?.trim() ?: u.address
+        val nextEmail = email?.trim()?.lowercase().orEmpty().ifBlank { u.email }
+        val emailChanged = !nextEmail.equals(u.email, ignoreCase = true)
+        if (emailChanged && db.findUser(nextEmail) != null) return "An account with this email already exists."
+        if (emailChanged && !db.updateUserEmail(u.id, nextEmail)) {
+            return "Enter a valid email address that is not already registered."
+        }
+        db.updateUserProfile(u.id, trimmedName, phone.trim())
+        if (address != null) db.updateUserAddress(u.id, nextAddress)
+        currentUser = db.users().firstOrNull { it.id == u.id }
+        userAccounts = db.users()
+        if (recipientName == u.fullName) recipientName = trimmedName
+        if (contactPhone == u.phone) contactPhone = phone.trim()
+        if (deliveryAddress == u.address) deliveryAddress = nextAddress
+        if (emailChanged) {
+            loginEmail = nextEmail
+            favoriteIds = db.favorites(nextEmail)
+            cart = loadCart()
+        }
         showToast("Profile settings updated!")
         return null
     }
@@ -578,86 +740,107 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun placeOrder() {
-        if (!isTourist) { showToast("Only tourist accounts can place orders."); return }
-        if (cart.isEmpty()) { showToast("Your cart is empty."); checkoutStep = 1; return }
-        val buying = checkoutItems
-        if (buying.isEmpty()) { showToast("Tick at least one item in your cart to check out."); checkoutStep = 1; return }
-        deliveryDetailsError()?.let { showToast(it); checkoutStep = 2; return }
-        val byId = products.associateBy { it.id }
-        buying.firstOrNull { (byId[it.product.id]?.stock ?: 0) < it.quantity }?.let { c ->
-            val left = byId[c.product.id]?.stock ?: 0
-            showToast("Only $left ${c.product.unit} of \"${c.product.name}\" left in stock. Please update your cart.")
-            checkoutStep = 1; return
+        if (!orderSubmissionInProgress.compareAndSet(false, true)) return
+        isPlacingOrder = true
+        try {
+            if (!isTourist) { showToast("Only tourist accounts can place orders."); return }
+            if (paymentMethod !in CHECKOUT_PAYMENT_METHODS) {
+                paymentMethod = CHECKOUT_PAYMENT_METHODS.first()
+                showToast("That payment method is no longer available. Please use $COD_PAYMENT_METHOD.")
+                return
+            }
+            if (cart.isEmpty()) { showToast("Your cart is empty."); checkoutStep = 1; return }
+            val buying = checkoutItems
+            if (buying.isEmpty()) { showToast("Tick at least one item in your cart to check out."); checkoutStep = 1; return }
+            deliveryDetailsError()?.let { showToast(it); checkoutStep = 2; return }
+            val byId = products.associateBy { it.id }
+            buying.firstOrNull { (byId[it.product.id]?.stock ?: 0) < it.quantity }?.let { c ->
+                val left = byId[c.product.id]?.stock ?: 0
+                showToast("Only $left ${c.product.unit} of \"${c.product.name}\" left in stock. Please update your cart.")
+                checkoutStep = 1; return
+            }
+            val orderAmt = cartTotal
+            val existingNumbers = farmerOrders.map { it.orderNumber }.toSet()
+            var refCode: String
+            do { refCode = "ORD-${LocalDate.now().year}-${Random.nextInt(1000, 10000)}" } while (refCode in existingNumbers)
+            val stamp = nowStamp()
+            val newOrderId = "ord-${System.currentTimeMillis()}"
+            val order = FarmerOrder(
+                id = newOrderId,
+                orderNumber = refCode,
+                customerEmail = userEmail,
+                customerName = recipientName.trim(),
+                customerPhone = contactPhone.trim(),
+                customerAddress = deliveryAddress.trim(),
+                items = buying.map {
+                    val product = byId[it.product.id]!!
+                    val seller = product.farmerId?.let { farmId -> farmers.firstOrNull { farm -> farm.id == farmId }?.farmName }
+                        ?: product.farmOrigin
+                    OrderItem(product.name, it.quantity, product.discountedPrice, product.id, product.imageUrl, seller)
+                },
+                totalAmount = orderAmt,
+                paymentMethod = paymentMethod,
+                paymentStatus = if (paymentMethod == COD_PAYMENT_METHOD) "COD" else "Paid via $paymentMethod",
+                fulfillmentStatus = "Pending",
+                orderDate = stamp,
+                uploadedReceiptUrl = "", // no payment proof uploaded through the desktop checkout
+                specialDeliveryNotes = deliveryNotes.trim().ifBlank { null },
+            )
+            val remaining = cart - buying.toSet()
+            try {
+                db.tx {
+                    db.saveOrderWithStock(order)
+                    persistCart(remaining)
+                }
+            } catch (e: Database.StockUnavailableException) {
+                showToast(e.message ?: "Product stock changed during checkout. Please review your cart.")
+                return
+            }
+            purchaseConfirmationOrder = order
+            // Remember the delivery address on the account for next time.
+            currentUser?.let { u -> if (u.address != order.customerAddress) { db.updateUserAddress(u.id, order.customerAddress); currentUser = u.copy(address = order.customerAddress) } }
+            farmerOrders = db.orders()
+            allProducts = db.products()
+            lastPlacedOrder = order
+            lastOrderTotal = orderAmt
+            lastOrderPaymentMethod = paymentMethod
+            lastOrderReference = refCode
+            checkoutStep = 1
+            cartUnselected = emptySet()
+            val productNames = order.items.joinToString { it.productName }
+            addNotification(AppNotification(System.currentTimeMillis(), "Purchase Successful!",
+                "Purchase Successful! You've purchased $productNames. Your order is now Pending.",
+                "Order #$refCode · ${order.items.sumOf { it.qty }} item(s) · $PESO${money(orderAmt)} · Cash on Delivery.",
+                nowStamp(), false, "order", "tourist", recipientEmail = userEmail, orderId = order.id,
+                eventKey = "order:${order.id}:purchased"))
+            notifyFarms(farmsOf(order), AppNotification(System.currentTimeMillis(), "New Produce Order: ${order.customerName}",
+                "Order #$refCode · $PESO${money(orderAmt)} · ${order.items.sumOf { it.qty }} item(s) to pack.",
+                "${order.customerName} placed order #$refCode (${order.items.joinToString { "${it.qty}× ${it.productName}" }}). Payment: ${order.paymentStatus}. Deliver to ${order.customerAddress}.",
+                nowStamp(), false, "farmer_order", "farmer", orderId = order.id,
+                eventKey = "order:${order.id}:placed"))
+            showToast("Order placed successfully! Amount: $PESO${money(orderAmt)}")
+        } finally {
+            isPlacingOrder = false
+            orderSubmissionInProgress.set(false)
         }
-        val orderAmt = cartTotal
-        val existingNumbers = farmerOrders.map { it.orderNumber }.toSet()
-        var refCode: String
-        do { refCode = "ORD-${LocalDate.now().year}-${Random.nextInt(1000, 10000)}" } while (refCode in existingNumbers)
-        val stamp = nowStamp()
-        val originFarm = buying.first().product.farmOrigin
-        // Couriers from the database take turns; the order still works if none are set up yet.
-        val courier = couriers.takeIf { it.isNotEmpty() }?.let { it[farmerOrders.size % it.size] }
-        val newOrderId = "ord-${System.currentTimeMillis()}"
-        val order = FarmerOrder(
-            id = newOrderId,
-            orderNumber = refCode,
-            customerEmail = userEmail,
-            customerName = recipientName.trim(),
-            customerPhone = contactPhone.trim(),
-            customerAddress = deliveryAddress.trim(),
-            items = buying.map { OrderItem(it.product.name, it.quantity, byId[it.product.id]!!.discountedPrice, it.product.id) },
-            totalAmount = orderAmt,
-            paymentMethod = paymentMethod,
-            paymentStatus = if (paymentMethod == "Cash on Delivery") "COD" else "Paid via $paymentMethod",
-            fulfillmentStatus = "Pending Packing",
-            orderDate = stamp,
-            uploadedReceiptUrl = "", // no payment proof uploaded through the desktop checkout
-            specialDeliveryNotes = deliveryNotes.trim().ifBlank { null },
-            courierName = courier?.company,
-            riderName = courier?.riderName,
-            riderPhone = courier?.riderPhone,
-            riderVehicle = courier?.vehicle,
-            currentLocation = "${originFarm} packing house · Awaiting dispatch",
-            estimatedArrival = setting("delivery_eta").ifBlank { null },
-            trackingNumber = "AGX-${Random.nextInt(100000, 1000000)}",
-            isReceivedByUser = false,
-            deliverySteps = listOf(
-                DeliveryCheckpoint(if (paymentMethod == "Cash on Delivery") "Order Placed (Cash on Delivery)" else "Order Placed & Payment Verified", "AgriTourism Gateway", stamp, true),
-                DeliveryCheckpoint("Fresh Farm Harvest & Packed", originFarm, "Pending", false),
-                DeliveryCheckpoint("Picked Up by Courier Rider", courier?.hub?.ifBlank { null } ?: "Courier hub", "Pending", false),
-                DeliveryCheckpoint("Out for Delivery", "En route to delivery address", "Pending", false),
-                DeliveryCheckpoint("Delivered & Confirmed by Tourist", "Customer Delivery Address", "Pending arrival", false),
-            ),
-        )
-        val remaining = cart - buying.toSet()
-        db.tx {
-            db.saveOrder(order)
-            buying.forEach { c -> db.updateStock(c.product.id, max(0, byId[c.product.id]!!.stock - c.quantity)) }
-            persistCart(remaining)
-        }
-        // Remember the delivery address on the account for next time.
-        currentUser?.let { u -> if (u.address != order.customerAddress) { db.updateUserAddress(u.id, order.customerAddress); currentUser = u.copy(address = order.customerAddress) } }
-        farmerOrders = listOf(order) + farmerOrders
-        val bought = buying.associate { it.product.id to it.quantity }
-        allProducts = allProducts.map { p -> bought[p.id]?.let { p.copy(stock = max(0, p.stock - it)) } ?: p }
-        lastPlacedOrder = order
-        activeTrackingOrderId = newOrderId
-        lastOrderTotal = orderAmt
-        lastOrderPaymentMethod = paymentMethod
-        lastOrderReference = refCode
-        checkoutStep = 4
-        cartUnselected = emptySet()
-        notifyFarms(farmsOf(order), AppNotification(System.currentTimeMillis(), "New Produce Order: ${order.customerName}",
-            "Order #$refCode · $PESO${money(orderAmt)} · ${order.items.sumOf { it.qty }} item(s) to pack.",
-            "${order.customerName} placed order #$refCode (${order.items.joinToString { "${it.qty}× ${it.productName}" }}). Payment: ${order.paymentStatus}. Deliver to ${order.customerAddress}.",
-            nowStamp(), false, "farmer_order", "farmer"))
-        showToast("Order placed successfully! Amount: $PESO${money(orderAmt)}")
     }
 
     // ---------------------------------------------------------------- bookings
     /** Saves a booking unless it would double-book the customer; returns false (with a message) if rejected. */
-    private fun trySaveBooking(b: Booking): Boolean = try {
-        db.saveBooking(b); true
+    private fun trySaveBooking(b: Booking, validateSchedule: Boolean = true): Boolean = try {
+        db.saveBooking(b, validateSchedule = validateSchedule); true
+    } catch (e: Database.InvalidBookingPaymentMethodException) {
+        showToast(e.message ?: "Farm bookings must use Pay at the Farm.")
+        false
+    } catch (e: Database.InvalidBookingScheduleException) {
+        showToast(e.message ?: OUTSIDE_BOOKING_SCHEDULE_MESSAGE)
+        false
+    } catch (e: Database.InvalidBookingDateException) {
+        showToast(e.message ?: "Choose a booking date from today through December 31 of next year.")
+        false
+    } catch (e: Database.InvalidTourPriceException) {
+        showToast(e.message ?: "This tour has an invalid price.")
+        false
     } catch (e: Database.DoubleBookingException) {
         val x = e.existing
         showToast("Double booking: ${b.customerName} already has #${x.bookingCode} (${x.activity}) on ${x.tourDate} at ${slotTime(x.tourTime)}.")
@@ -668,7 +851,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
 
     private fun updateBooking(id: Long, f: (Booking) -> Booking) {
         val updated = booking(id)?.let(f) ?: return
-        if (trySaveBooking(updated)) bookings = bookings.map { if (it.id == id) updated else it }
+        if (trySaveBooking(updated, validateSchedule = false)) bookings = bookings.map { if (it.id == id) updated else it }
     }
 
     private fun updateNotifications(list: List<AppNotification>) {
@@ -682,33 +865,34 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     private fun addNotification(n0: AppNotification) {
+        if (n0.title in setOf("Booking", "Tour Booking Confirmed")) return
         // Keep ids unique even when several alerts are created in the same millisecond.
         val n = n0.copy(id = max(n0.id, (notifications.maxOfOrNull { it.id } ?: 0) + 1))
-        db.saveNotification(n)
-        notifications = listOf(n) + notifications
+        if (db.saveNotification(n)) notifications = listOf(n) + notifications
     }
 
     fun bookingAction(id: Long, newStatus: String) {
-        if (denied(booking(id)?.let(::canManageBooking) == true, "accept or decline this booking")) return
+        if (denied(booking(id)?.let(::canActOnBooking) == true, "accept or decline this booking")) return
         updateBooking(id) { it.copy(status = newStatus, attendanceStatus = if (newStatus == "Cancelled") "Declined by Farm" else it.attendanceStatus) }
         booking(id)?.let { b ->
             val ok = newStatus == "Confirmed"
             addNotification(AppNotification(System.currentTimeMillis(), if (ok) "Booking Accepted: ${b.farmName}" else "Booking Declined: ${b.farmName}",
                 "Your reservation #${b.bookingCode} for ${b.tourDate} was ${if (ok) "accepted" else "declined"} by the farm host.",
                 "Reservation #${b.bookingCode} (${b.activity}, ${b.tourDate} ${b.tourTime}, ${b.participants} guests) was ${if (ok) "accepted. See you at the farm!" else "declined by the farm host."}",
-                nowStamp(), false, "booking", "tourist", b.id, recipientEmail = b.customerEmail))
+                nowStamp(), false, "booking_update", "tourist", b.id, recipientEmail = b.customerEmail))
         }
         showToast("Booking ${if (newStatus == "Confirmed") "ACCEPTED" else "DECLINED"} successfully!")
     }
 
     fun cancelBooking(id: Long) {
-        if (denied(booking(id)?.let(::canViewBooking) == true, "cancel this booking")) return
+        val allowed = booking(id)?.let { b -> ownsBooking(b) || canActOnBooking(b) } == true
+        if (denied(allowed, "cancel this booking")) return
         updateBooking(id) { it.copy(status = "Cancelled", attendanceStatus = "Cancelled by Tourist") }
         showToast("Booking appointment has been CANCELLED.")
     }
 
     fun deleteBooking(id: Long) {
-        if (denied(isAdmin || booking(id)?.let(::ownsBooking) == true, "delete this booking")) return
+        if (denied(booking(id)?.let(::ownsBooking) == true, "delete this booking")) return
         db.tx {
             db.deleteBooking(id)
             db.deleteNotificationsForBooking(id)
@@ -720,7 +904,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun saveEditedBooking() {
-        if (denied(editingBooking?.let { e -> booking(e.id)?.let(::canViewBooking) } == true, "edit this booking")) return
+        if (denied(editingBooking?.let { e -> booking(e.id)?.let { b -> ownsBooking(b) || canActOnBooking(b) } } == true, "edit this booking")) return
         val e0 = editingBooking ?: return
         if (e0.participants < 1) { showToast("A booking needs at least 1 guest."); return }
         if (parseTourDate(e0.tourDate) == null) { showToast("Please enter a valid date (YYYY-MM-DD)."); return }
@@ -767,7 +951,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun checkInBooking(id: Long) {
-        if (denied(booking(id)?.let(::canManageBooking) == true, "check in guests for this booking")) return
+        if (denied(booking(id)?.let(::canActOnBooking) == true, "check in guests for this booking")) return
         if (bookings.firstOrNull { it.id == id }?.status == "Cancelled") { showToast("Cancelled bookings cannot be checked in."); return }
         val nowTime = LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm a"))
         updateBooking(id) { it.copy(attendanceStatus = "Arrived & Checked In", status = "Confirmed", checkedInAt = nowTime) }
@@ -776,7 +960,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun assignGuide(id: Long, guide: String) {
-        if (denied(booking(id)?.let(::canManageBooking) == true, "assign a guide to this booking")) return
+        if (denied(booking(id)?.let(::canActOnBooking) == true, "assign a guide to this booking")) return
         updateBooking(id) { it.copy(assignedGuide = guide) }
         selectedBookingForView = selectedBookingForView?.let { v -> bookings.firstOrNull { it.id == v.id } }
         showToast("Tour guide \"$guide\" assigned to reservation.")
@@ -794,22 +978,29 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     /** Validates a reservation date (must parse and not be in the past). */
     private fun dateError(d: String): String? {
         val date = parseTourDate(d) ?: return "Please enter a valid date (YYYY-MM-DD)."
-        return if (date.isBefore(LocalDate.now())) "Please choose a date from today onwards." else null
+        val window = BookingDateWindow.current()
+        return when {
+            date.isBefore(window.first) -> "Please choose a date from today onwards."
+            date.isAfter(window.last) -> "Please choose a date no later than December 31 of next year."
+            else -> null
+        }
     }
 
     fun bookSelectedTour() {
         if (!isLoggedIn) { showToast("Please log in using the Log In button at the top header to confirm your booking."); activePage = Page.LOGIN; return }
         if (!isTourist) { showToast("Only tourist accounts can book tours."); return }
         dateError(tourDate)?.let { showToast(it); return }
-        if (tourGuests < 1) { showToast("Please add at least 1 guest."); return }
+        if (tourPaymentMethod !in TOUR_PAYMENT_METHODS) { showToast("Please choose an available tour payment method."); return }
         val t = selectedTour
-        if (tourTime.isBlank()) tourTime = slotsFor("tour", t.id).firstOrNull().orEmpty()
-        if (tourTime !in slotsFor("tour", t.id)) { showToast("Please choose one of this tour's time slots."); return }
+        if (!t.bookingEnabled) { showToast("Bookings for this tour are currently unavailable."); return }
+        val slots = availableSlotsFor("tour", t.id)
+        if (tourTime.isBlank()) tourTime = slots.firstOrNull().orEmpty()
+        db.bookingScheduleError("tour", t.id, tourTime)?.let { showToast(it); return }
         val nb = Booking(
             id = newId(), bookingCode = newBookingCode(), farmId = t.id, farmName = t.name,
             customerName = displayName, customerPhone = userPhone, customerEmail = userEmail,
-            activity = t.name, tourDate = tourDate, tourTime = tourTime, participants = tourGuests,
-            totalAmount = t.pricePerPerson * tourGuests, paymentMethod = tourPaymentMethod, status = "Confirmed",
+            activity = t.name, tourDate = tourDate, tourTime = tourTime, participants = 1,
+            totalAmount = t.bookingTotal(1), paymentMethod = tourPaymentMethod, status = "Confirmed",
             attendanceStatus = "Pending Confirmation",
             assignedGuide = defaultGuide(t.farmerId, t.farmerName),
         )
@@ -826,9 +1017,11 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (!isTourist) { showToast("Only tourist accounts can book tours."); return }
         dateError(fruitDate)?.let { showToast(it); return }
         if (fruitGuests < 1) { showToast("Please add at least 1 guest."); return }
+        if (fruitPaymentMethod !in TOUR_PAYMENT_METHODS) { showToast("Please choose an available fruit-picking payment method."); return }
         val f = selectedFruit
-        if (fruitTime.isBlank()) fruitTime = slotsFor("orchard", f.id).firstOrNull().orEmpty()
-        if (fruitTime !in slotsFor("orchard", f.id)) { showToast("Please choose one of this orchard's time slots."); return }
+        val slots = availableSlotsFor("orchard", f.id)
+        if (fruitTime.isBlank()) fruitTime = slots.firstOrNull().orEmpty()
+        db.bookingScheduleError("orchard", f.id, fruitTime)?.let { showToast(it); return }
         val nb = Booking(
             id = newId(), bookingCode = newBookingCode(), farmId = f.id, farmName = f.farmName,
             customerName = displayName, customerPhone = userPhone, customerEmail = userEmail,
@@ -846,20 +1039,21 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun saveFarmerBooking() {
-        if (denied(isStaff, "create walk-in bookings")) return
+        if (denied(isFarmer, "create walk-in bookings")) return
         if (myTours.isEmpty()) { showToast("Your farm has no tours to book yet."); return }
         if (newBookingCustomer.isBlank()) { showToast("Please enter the guest's name."); return }
         dateError(newBookingDate)?.let { showToast(it); return }
-        if (newBookingGuests < 1) { showToast("Please add at least 1 guest."); return }
+        if (newBookingPayment !in WALK_IN_PAYMENT_METHODS) { showToast("Please choose an available walk-in payment method."); return }
         val t = myTours.firstOrNull { it.name == newBookingActivity } ?: myTours.first()
-        if (newBookingTime.isBlank()) newBookingTime = slotsFor("tour", t.id).firstOrNull().orEmpty()
-        if (newBookingTime !in slotsFor("tour", t.id)) { showToast("Please choose one of this tour's time slots."); return }
-        val total = t.pricePerPerson * newBookingGuests
+        val slots = availableSlotsFor("tour", t.id)
+        if (newBookingTime.isBlank()) newBookingTime = slots.firstOrNull().orEmpty()
+        db.bookingScheduleError("tour", t.id, newBookingTime)?.let { showToast(it); return }
+        val total = t.bookingTotal(1)
         val nb = Booking(
             id = newId(), bookingCode = newBookingCode(), farmId = t.id, farmName = t.name,
             customerName = newBookingCustomer, customerPhone = newBookingPhone.trim().ifBlank { null },
             customerEmail = null, activity = t.name, tourDate = newBookingDate,
-            tourTime = newBookingTime, participants = newBookingGuests, totalAmount = total,
+            tourTime = newBookingTime, participants = 1, totalAmount = total,
             paymentMethod = newBookingPayment, attendanceStatus = "Pending Confirmation", status = "Confirmed",
             assignedGuide = defaultGuide(t.farmerId, t.farmerName),
         )
@@ -906,7 +1100,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun canEditReview(r: CustomerReview) = isTourist && r.userEmail?.equals(userEmail, true) == true
-    fun canDeleteReview(r: CustomerReview) = canEditReview(r) || isAdmin
+    fun canDeleteReview(r: CustomerReview) = canEditReview(r)
 
     /** Changes the rating/comment of the tourist's own review; returns an error or null. */
     fun updateReview(reviewId: Int, rating: Int, comment: String): String? {
@@ -937,7 +1131,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     // ---------------------------------------------------------------- farm setup (guides & time slots)
-    private fun canManageFarm(farmId: Int?) = isAdmin || (farmId != null && farmId == myFarmId)
+    private fun canManageFarm(farmId: Int?) = isFarmer && farmId != null && farmId == myFarmId
 
     private fun activityFarm(type: String, id: Int): Int? =
         if (type == "orchard") fruitPicking.firstOrNull { it.id == id }?.farmerId else tours.firstOrNull { it.id == id }?.farmerId
@@ -975,10 +1169,72 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         showToast("Time slot \"${t.label}\" removed. Existing bookings keep their time.")
     }
 
+    /** Operating-hours configuration for a tour/orchard: opening, closing, and slot length in minutes. */
+    data class OperatingScheduleConfig(val open: String, val close: String, val slotMinutes: Int)
+
+    private fun scheduleKey(type: String, activityId: Int) = "slot_config.$type.$activityId"
+
+    /** The saved auto-schedule for an activity, or null if it has never been configured. */
+    fun operatingSchedule(type: String, activityId: Int): OperatingScheduleConfig? =
+        settings[scheduleKey(type, activityId)]?.split("|")?.takeIf { it.size == 3 }?.let { parts ->
+            val minutes = parts[2].toIntOrNull() ?: return null
+            OperatingScheduleConfig(parts[0], parts[1], minutes)
+        }
+
+    /**
+     * Generates "HH:MM AM - HH:MM AM" slot labels stepping [slotMinutes] from [open] up to (never past)
+     * [close]. The final slot is shortened so it ends exactly at closing time.
+     */
+    fun generateSlotLabels(open: LocalTime, close: LocalTime, slotMinutes: Int): List<String> {
+        if (slotMinutes <= 0 || !open.isBefore(close)) return emptyList()
+        val labels = mutableListOf<String>()
+        var start = open
+        while (start.isBefore(close)) {
+            val end = minOf(start.plusMinutes(slotMinutes.toLong()), close)
+            labels.add("${formatClockTime(start)} - ${formatClockTime(end)}")
+            start = end
+        }
+        return labels
+    }
+
+    /**
+     * Validates and saves a farm tour's operating hours + slot length, then regenerates its bookable
+     * slots from those hours. Slots with active bookings are preserved even if they fall outside the
+     * new hours, so confirmed reservations are never modified or deleted. Returns an error or null.
+     */
+    fun saveOperatingSchedule(type: String, activityId: Int, openText: String, closeText: String, slotMinutes: Int): String? {
+        if (type !in setOf("tour", "orchard")) return "Unsupported activity type."
+        if (!canManageFarm(activityFarm(type, activityId))) return "You can only manage your own farm's schedule."
+        val open = parseClockTime(openText) ?: return "Enter a valid opening time (e.g. 08:00 AM)."
+        val close = parseClockTime(closeText) ?: return "Enter a valid closing time (e.g. 05:00 PM)."
+        if (!open.isBefore(close)) return "Closing time must be later than opening time."
+        if (slotMinutes !in 5..240) return "Slot duration must be between 5 and 240 minutes."
+        val labels = generateSlotLabels(open, close, slotMinutes)
+        if (labels.isEmpty()) return "The operating hours are too short for the chosen slot duration."
+        val openLabel = formatClockTime(open)
+        val closeLabel = formatClockTime(close)
+        val bookedStarts = bookings.filter {
+            it.activityType == type && it.farmId == activityId && it.status != "Cancelled"
+        }.map { slotTime(it.tourTime) }.toSet()
+        db.tx {
+            db.setSetting(scheduleKey(type, activityId), "$openLabel|$closeLabel|$slotMinutes")
+            if (type == "tour") allTours.firstOrNull { it.id == activityId }?.let { t ->
+                val updated = t.copy(operatingHours = "$openLabel - $closeLabel")
+                db.updateTour(updated)
+                allTours = allTours.map { if (it.id == activityId) updated else it }
+            }
+            db.replaceTimeSlots(type, activityId, labels, bookedStarts)
+        }
+        settings = db.settings(); timeSlots = db.timeSlots()
+        showToast("Schedule saved: $openLabel–$closeLabel in $slotMinutes-min slots (${labels.size} generated).")
+        return null
+    }
+
     // ---------------------------------------------------------------- platform settings (admin)
     /** Adds a delivery courier; returns an error message or null on success. */
     fun addCourier(c: Courier): String? {
         if (!isAdmin) return "Only administrators can manage couriers."
+        if (isAdmin) return "Administrator accounts have read-only access to platform settings."
         if (c.company.isBlank() || c.riderName.isBlank()) return "Enter the courier company and rider name."
         if (c.riderPhone.count(Char::isDigit) < 7) return "Enter a valid rider phone number."
         db.addCourier(c); couriers = db.couriers()
@@ -987,7 +1243,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     fun removeCourier(c: Courier) {
-        if (denied(isAdmin, "remove couriers")) return
+        if (denied(false, "remove couriers")) return
         db.deleteCourier(c.id); couriers = db.couriers()
         showToast("Courier ${c.riderName} removed. Past orders keep their courier details.")
     }
@@ -995,6 +1251,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     /** Saves a platform setting; returns an error message or null on success. */
     fun saveSetting(key: String, value: String): String? {
         if (!isAdmin) return "Only administrators can change settings."
+        if (isAdmin) return "Administrator accounts have read-only access to platform settings."
         val v = value.trim()
         if (key == "delivery_fee" && (v.toDoubleOrNull() ?: -1.0) < 0) return "Delivery fee must be a number of 0 or more."
         if (key == "product_categories" && v.split(",").none { it.isNotBlank() }) return "Enter at least one category."
@@ -1005,7 +1262,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
 
     // ---------------------------------------------------------------- products
     fun saveProduct() {
-        if (denied(isAdmin || myFarmId != null, "add products")) return
+        if (denied(isFarmer && myFarmId != null, "add products")) return
         if (newProductName.isBlank()) { showToast("Please enter a product name."); return }
         val price = newProductPrice.toDoubleOrNull()
         if (price == null || price <= 0) { showToast("Please enter a valid price."); return }
@@ -1018,7 +1275,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             val old = products.firstOrNull { it.id == id } ?: run { showToast("That product no longer exists."); return }
             if (denied(canEditProduct(old), "edit this product")) return
             val updated = old.copy(name = newProductName.trim(), category = newProductCategory, price = price, unit = unit, stock = stock, discountPercent = discount,
-                imageUrl = newProductImage.ifBlank { old.imageUrl }, description = newProductDesc.ifBlank { old.description })
+                imageUrl = newProductImage.ifBlank { old.imageUrl }, description = newProductDesc.ifBlank { old.description },
+                farmerId = old.farmerId, farmOrigin = old.farmOrigin)
             db.updateProduct(updated)
             allProducts = allProducts.map { if (it.id == id) updated else it }
             cart = cart.map { if (it.product.id == id) it.copy(product = updated) else it }
@@ -1044,10 +1302,12 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         showToast("Successfully added \"${item.name}\" (Stock limit: $stock ${item.unit}) to your catalog!")
     }
 
-    fun canEditProduct(p: Product) = isAdmin || (myFarmId != null && p.farmerId == myFarmId)
+    fun canEditProduct(p: Product) = isFarmer && myFarmId != null && p.farmerId == myFarmId
 
     fun openAddProduct() {
+        if (denied(isFarmer && myFarmId != null, "add products")) return
         editingProductId = null
+        adminListingFarmId = myFarmId
         newProductName = ""; newProductDesc = ""; newProductStock = "25"; newProductPrice = "100"; newProductUnit = "kg"; newProductDiscount = "0"
         isAddProductModalOpen = true
     }
@@ -1055,6 +1315,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     fun openEditProduct(p: Product) {
         if (denied(canEditProduct(p), "edit this product")) return
         editingProductId = p.id
+        adminListingFarmId = p.farmerId
         newProductName = p.name; newProductCategory = p.category; newProductPrice = money(p.price).replace(",", "")
         newProductUnit = p.unit; newProductStock = p.stock.toString(); newProductDesc = p.description; newProductImage = p.imageUrl
         newProductDiscount = p.discountPercent.toString()
@@ -1062,8 +1323,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     /** Asks before running [action]. */
-    fun confirm(title: String, message: String, yesLabel: String = "Yes, Delete", action: () -> Unit) {
-        pendingConfirm = Confirm(title, message, yesLabel, action)
+    fun confirm(title: String, message: String, yesLabel: String = "Yes, Delete", cancelLabel: String = "Keep", action: () -> Unit) {
+        pendingConfirm = Confirm(title, message, yesLabel, action, cancelLabel)
     }
 
     /** Removes a product from the market and every cart; past orders keep it. */
@@ -1097,7 +1358,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }.onFailure { showToast("Could not load that photo: ${it.message}") }.getOrNull()
 
     fun uploadProductImage(file: File) {
-        if (denied(isStaff, "upload product photos")) return
+        if (denied(isFarmer, "upload product photos")) return
         storeUpload(file)?.let { newProductImage = it; showToast("Photo uploaded & saved for offline catalog!") }
     }
 
@@ -1143,11 +1404,45 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         return null
     }
 
-    // ---------------------------------------------------------------- farmer-created tours & orchards
-    data class ActivityDraft(val name: String, val price: String, val description: String, val image: String, val slot: String,
-                             val hours: String = "", val activities: String = "", val fruit: String = "", val duration: String = "", val season: String = "")
+    fun updateFarmDetails(farmId: Int, ownerName: String, farmName: String, location: String, province: String): String? {
+        if (!isAdmin) return "Only administrators can edit farmer profiles."
+        if (isAdmin) return "Administrator accounts have read-only access to farm profiles."
+        if (ownerName.isBlank() || farmName.isBlank() || location.isBlank() || province.isBlank())
+            return "Complete the owner name, farm name, location, and province."
+        if (db.updateFarmerDetails(farmId, ownerName, farmName, location, province) == 0)
+            return "That farmer profile no longer exists."
+        reloadFromDb()
+        showToast("Farmer and farm profile updated.")
+        return null
+    }
 
-    private fun draftError(d: ActivityDraft): String? = if (myFarm == null) "Only farmer accounts linked to a farm can add experiences." else fieldsError(d)
+    // ---------------------------------------------------------------- farmer-created tours & orchards
+    data class ActivityDraft(
+        val name: String,
+        val price: String,
+        val description: String,
+        val image: String,
+        val slot: String,
+        val hours: String = "",
+        val activities: String = "",
+        val fruit: String = "",
+        val duration: String = "",
+        val season: String = "",
+        val experienceType: String = "tour",
+        val location: String = "",
+        val farmerId: Int? = null,
+        val amenities: String = "",
+        val estimatedDuration: String = "",
+    )
+
+    private fun draftFarm(d: ActivityDraft): FarmerProfile? =
+        myFarmId?.let { id -> farmers.firstOrNull { it.id == id } }
+
+    private fun draftError(d: ActivityDraft): String? = when {
+        !isFarmer || myFarmId == null -> "Only farmer accounts linked to a farm can add experiences."
+        draftFarm(d) == null -> "Select the farm responsible for this activity."
+        else -> fieldsError(d)
+    }
 
     private fun fieldsError(d: ActivityDraft): String? = when {
         d.name.isBlank() -> "Enter a name."
@@ -1167,14 +1462,16 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         return Result.success("%02d:%s %s".format(h.toInt(), min, ap.uppercase()) + if (name.isNotEmpty()) " - $name" else "")
     }
 
-    /** Adds a farm tour to the farmer's own farm; returns an error or null on success. */
+    /** Adds a farm tour or other farm activity, published immediately and owned by its selected farm. */
     fun createTour(d: ActivityDraft): String? {
         draftError(d)?.let { return it }
-        val f = myFarm!!
+        val f = draftFarm(d) ?: return "Select the farm responsible for this activity."
         val slot = normalizeSlot(d.slot).getOrElse { return it.message }
-        val tour = FarmTour(0, d.name.trim(), f.location, 0.0, 0, d.price.toInt(), d.hours.trim().ifBlank { "8:00 AM - 5:00 PM" },
-            emptyList(), d.activities.split(",").map { it.trim() }.filter { it.isNotEmpty() },
-            d.image.ifBlank { f.farmBannerUrl }, d.description.trim(), "New", f.name, emptyList(), f.id)
+        val experienceType = d.experienceType.takeIf { it in setOf("tour", "other_activity") } ?: "tour"
+        val tour = FarmTour(0, d.name.trim(), d.location.trim().ifBlank { f.location }, 0.0, 0, d.price.toInt(), d.hours.trim().ifBlank { "8:00 AM - 5:00 PM" },
+            d.amenities.split(",").map { it.trim() }.filter { it.isNotEmpty() }, d.activities.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            d.image.ifBlank { f.farmBannerUrl }, d.description.trim(), if (experienceType == "other_activity") "Other Farm Activity" else "New",
+            f.name, emptyList(), f.id, estimatedDuration = d.estimatedDuration.trim(), experienceType = experienceType)
         val id = db.tx { db.createTour(tour).also { db.addTimeSlot("tour", it, slot) } }
         allTours = db.tours(); farmers = db.farmers(); timeSlots = db.timeSlots()
         isAddTourModalOpen = false
@@ -1186,9 +1483,9 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     fun createOrchard(d: ActivityDraft): String? {
         draftError(d)?.let { return it }
         if (d.fruit.isBlank()) return "Enter the fruit tourists will pick."
-        val f = myFarm!!
+        val f = draftFarm(d) ?: return "Select the farm responsible for this activity."
         val slot = normalizeSlot(d.slot).getOrElse { return it.message }
-        val item = FruitPickingItem(0, d.name.trim(), f.farmName, f.location, d.fruit.trim(), d.price.toInt(), 0.0, 0,
+        val item = FruitPickingItem(0, d.name.trim(), f.farmName, d.location.trim().ifBlank { f.location }, d.fruit.trim(), d.price.toInt(), 0.0, 0,
             d.duration.trim().ifBlank { "2 hours" }, d.fruit.trim(), d.image.ifBlank { f.farmBannerUrl }, d.description.trim(),
             d.season.trim().ifBlank { "Year-round" }, emptyList(), f.id)
         val id = db.tx { db.createOrchard(item).also { db.addTimeSlot("orchard", it, slot) } }
@@ -1206,14 +1503,82 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         val old = tours.firstOrNull { it.id == id } ?: return "That tour no longer exists."
         if (!canEditTour(old)) return "You can only edit your own farm's tours."
         fieldsError(d)?.let { return it }
+        val experienceType = d.experienceType.takeIf { it in setOf("tour", "other_activity") } ?: old.experienceType
         val t = old.copy(name = d.name.trim(), pricePerPerson = d.price.toInt(), description = d.description.trim(),
             imageUrl = d.image.ifBlank { old.imageUrl }, operatingHours = d.hours.trim().ifBlank { old.operatingHours },
-            activities = d.activities.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+            activities = d.activities.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+            location = d.location.trim().ifBlank { old.location },
+            amenities = d.amenities.takeIf { it.isNotBlank() }?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: old.amenities,
+            estimatedDuration = d.estimatedDuration.trim().ifBlank { old.estimatedDuration },
+            experienceType = experienceType,
+            highlightTag = if (experienceType == "other_activity") "Other Farm Activity" else old.highlightTag,
+            farmerId = old.farmerId, farmerName = old.farmerName)
         db.updateTour(t)
         allTours = allTours.map { if (it.id == id) t else it }
         if (selectedTour.id == id) selectedTour = t
         editingTour = null
         showToast("Tour \"${t.name}\" updated.")
+        return null
+    }
+
+    fun updateTourManagement(
+        id: Int,
+        priceText: String,
+        priceStatus: TourPriceStatus,
+        priceType: TourPriceType,
+        galleryText: String,
+        bookingEnabled: Boolean,
+        published: Boolean = true,
+    ): String? {
+        if (!isAdmin) return "Only administrators can manage tour pricing and availability."
+        if (isAdmin) return "Administrator accounts have read-only access to tour listings."
+        val tour = db.tours().firstOrNull { it.id == id } ?: return "That tour no longer exists."
+        val price = priceText.toIntOrNull()?.takeIf { it >= 0 }
+            ?: return "Enter a valid non-negative tour price."
+        val hasValidSlot = db.timeSlots().any { slot ->
+            slot.activityType == "tour" && slot.activityId == id &&
+                db.bookingScheduleError("tour", id, slot.label) == null
+        }
+        if (published && bookingEnabled && !hasValidSlot) return "Add operating hours and at least one valid time slot before enabling bookings."
+        val updated = tour.copy(
+            pricePerPerson = price,
+            priceApproved = true,
+            priceStatus = priceStatus,
+            priceType = priceType,
+            thumbnails = galleryText.lines().map(String::trim).filter(String::isNotEmpty),
+            bookingEnabled = bookingEnabled,
+            archived = !published,
+        )
+        db.updateTour(updated)
+        db.setArchived("tours", id.toLong(), !published)
+        allTours = allTours.map { if (it.id == id) updated else it }
+        if (selectedTour.id == id) selectedTour = updated
+        showToast("Tour listing, pricing, and availability updated for ${updated.name}.")
+        return null
+    }
+
+    /** Publishes or hides one of the current farmer's own listings; admins stay read-only. */
+    fun setListingPublished(table: String, id: Long, published: Boolean): String? {
+        if (isAdmin) return "Administrator accounts have read-only access to catalog listings."
+        if (!isFarmer) return "Only farmers can manage catalog listings."
+        if (table !in setOf("tours", "fruit_picking", "products")) return "That listing type is not supported."
+        val farmId = myFarmId ?: return "Only farmers linked to a farm can manage listings."
+        val owned = when (table) {
+            "tours" -> allTours.any { it.id.toLong() == id && it.farmerId == farmId }
+            "fruit_picking" -> allOrchards.any { it.id.toLong() == id && it.farmerId == farmId }
+            else -> allProducts.any { it.id == id && it.farmerId == farmId }
+        }
+        if (!owned) return "You can only manage your own farm's listings."
+        db.setArchived(table, id, !published)
+        when (table) {
+            "tours" -> allTours = allTours.map { if (it.id.toLong() == id) it.copy(archived = !published) else it }
+            "fruit_picking" -> allOrchards = allOrchards.map { if (it.id.toLong() == id) it.copy(archived = !published) else it }
+            "products" -> {
+                allProducts = allProducts.map { if (it.id == id) it.copy(archived = !published) else it }
+                if (!published) cart = cart.filterNot { it.product.id == id }
+            }
+        }
+        showToast("Listing ${if (published) "published" else "unpublished"}.")
         return null
     }
 
@@ -1225,7 +1590,9 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (d.fruit.isBlank()) return "Enter the fruit tourists will pick."
         val o = old.copy(title = d.name.trim(), pricePerPerson = d.price.toInt(), description = d.description.trim(),
             imageUrl = d.image.ifBlank { old.imageUrl }, fruitName = d.fruit.trim(), seasonalFruits = d.fruit.trim(),
-            duration = d.duration.trim().ifBlank { old.duration }, seasonAvailability = d.season.trim().ifBlank { old.seasonAvailability })
+            duration = d.duration.trim().ifBlank { old.duration }, seasonAvailability = d.season.trim().ifBlank { old.seasonAvailability },
+            location = d.location.trim().ifBlank { old.location },
+            farmName = old.farmName, farmerId = old.farmerId)
         db.updateOrchard(o)
         allOrchards = allOrchards.map { if (it.id == id) o else it }
         if (selectedFruit.id == id) selectedFruit = o
@@ -1243,13 +1610,15 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     fun askDeleteTour(t: FarmTour) {
         val n = upcomingBookings("tour", t.id).size
         confirm("Delete \"${t.name}\"?", "Tourists will no longer see or book it." +
-            if (n > 0) " $n upcoming booking(s) stay valid — contact those guests if the tour won't run." else " Past bookings are kept.") { deleteTour(t.id) }
+            if (n > 0) " $n upcoming booking(s) stay valid — contact those guests if the tour won't run." else " Past bookings are kept.",
+            yesLabel = "Yes, Delete") { deleteTour(t.id) }
     }
 
     fun askDeleteOrchard(o: FruitPickingItem) {
         val n = upcomingBookings("orchard", o.id).size
         confirm("Delete \"${o.title}\"?", "Tourists will no longer see or book it." +
-            if (n > 0) " $n upcoming booking(s) stay valid — contact those guests if it won't run." else " Past bookings are kept.") { deleteOrchard(o.id) }
+            if (n > 0) " $n upcoming booking(s) stay valid — contact those guests if it won't run." else " Past bookings are kept.",
+            yesLabel = "Yes, Delete") { deleteOrchard(o.id) }
     }
 
     /** Removes a tour from the catalog; existing bookings keep working. */
@@ -1274,101 +1643,107 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     // ---------------------------------------------------------------- orders
-    /** Tourists can cancel before packing starts; farms and admins until it is out for delivery. */
+    /** Only the owning tourist or owning farmer may cancel a pending order. */
     fun canCancelOrder(o: FarmerOrder): Boolean = !o.isReceivedByUser && when {
-        ownsOrder(o) -> o.fulfillmentStatus == "Pending Packing"
-        canManageOrder(o) -> o.fulfillmentStatus in setOf("Pending Packing", "Packed")
+        ownsOrder(o) -> o.fulfillmentStatus == "Pending"
+        isFarmer && canManageOrder(o) -> o.fulfillmentStatus == "Pending"
         else -> false
+    }
+
+    fun canUpdateOrderAddress(o: FarmerOrder) =
+        ownsOrder(o) && o.fulfillmentStatus == "Pending" && !o.isReceivedByUser
+
+    fun updateOrderAddress(id: String, address: String) {
+        val o = order(id) ?: return
+        if (denied(canUpdateOrderAddress(o), "update this order's delivery address")) return
+        val normalized = address.trim()
+        if (normalized.length !in 5..300) {
+            showToast("Enter a delivery address between 5 and 300 characters.")
+            return
+        }
+        val updated = db.updatePendingOrderAddress(id, userEmail, normalized)
+        if (updated == null) {
+            showToast("Only your pending order can have its delivery address updated.")
+            farmerOrders = db.orders()
+            return
+        }
+        farmerOrders = db.orders()
+        selectedOrderForView = updated
+        showToast("Delivery address updated.")
     }
 
     /** Cancels an order and puts its items back in stock. */
     fun cancelOrder(id: String) {
         val o = order(id) ?: return
         if (denied(canCancelOrder(o), "cancel this order")) return
-        val back = o.items.filter { it.productId != null }.groupBy { it.productId!! }.mapValues { (_, v) -> v.sumOf { it.qty } }
-        val byFarm = isTourist
-        db.tx {
-            back.forEach { (pid, q) -> allProducts.firstOrNull { it.id == pid }?.let { db.updateStock(pid, it.stock + q) } }
-            updateOrder(id) { it.copy(fulfillmentStatus = "Cancelled", currentLocation = "Order cancelled") }
+        val byTourist = isTourist
+        val cancelled = db.transitionOrderStatus(id, "Cancelled", allowConfirmedCancellation = false)
+        if (cancelled == null) {
+            showToast("This order can no longer be cancelled.")
+            return
         }
-        allProducts = allProducts.map { p -> back[p.id]?.let { p.copy(stock = p.stock + it) } ?: p }
-        if (byFarm) notifyFarms(farmsOf(o), AppNotification(System.currentTimeMillis(), "Order Cancelled: ${o.customerName}",
+        farmerOrders = db.orders()
+        allProducts = db.products()
+        if (byTourist) notifyFarms(farmsOf(o), AppNotification(System.currentTimeMillis(), "Order Cancelled: ${o.customerName}",
             "Order #${o.orderNumber} was cancelled by the customer.", "${o.customerName} cancelled order #${o.orderNumber}. Items were returned to stock.",
-            nowStamp(), false, "farmer_order", "farmer"))
-        else addNotification(AppNotification(System.currentTimeMillis(), "Order Cancelled by Farm", "Order #${o.orderNumber} was cancelled by the farm.",
-            "Your order #${o.orderNumber} was cancelled by the farm. Contact the farm about any payment you made.",
-            nowStamp(), false, "order", "tourist", recipientEmail = o.customerEmail))
+            nowStamp(), false, "farmer_order", "farmer", orderId = o.id, eventKey = "order:${o.id}:cancelled"))
+        else o.customerEmail?.takeIf { it.isNotBlank() }?.let { email ->
+            val productNames = o.items.joinToString { it.productName }
+            addNotification(AppNotification(System.currentTimeMillis(), "Order Cancelled.",
+                "Order Cancelled. Your order for $productNames has been cancelled.",
+                "Order #${o.orderNumber} was cancelled by the farm. Contact the farm about any payment you made.",
+                nowStamp(), false, "order", "tourist", recipientEmail = email, orderId = o.id,
+                eventKey = "order:${o.id}:cancelled"))
+        }
         showToast("Order #${o.orderNumber} cancelled. Items returned to stock.")
     }
 
-    /** Admin-only: permanently removes an order record. */
-    fun deleteOrder(id: String) {
-        if (denied(isAdmin, "delete orders")) return
-        db.deleteOrder(id)
-        farmerOrders = farmerOrders.filterNot { it.id == id }
+    /** Tourists may permanently remove their own cancelled orders from their purchase history. */
+    fun canDeletePurchase(o: FarmerOrder): Boolean =
+        ownsOrder(o) && o.fulfillmentStatus == "Cancelled" && !o.isReceivedByUser
+
+    /** Permanently deletes a cancelled purchase that belongs to the signed-in tourist. */
+    fun deletePurchase(id: String) {
+        val o = order(id) ?: return
+        if (denied(canDeletePurchase(o), "delete this cancelled purchase")) return
+        if (!db.deleteOrder(id)) {
+            showToast("Only your own cancelled orders can be deleted.")
+            farmerOrders = db.orders()
+            return
+        }
+        farmerOrders = db.orders()
         if (selectedOrderForView?.id == id) selectedOrderForView = null
-        if (selectedOrderForTracking?.id == id) selectedOrderForTracking = null
-        showToast("Order deleted.")
+        showToast("Order #${o.orderNumber} removed from your purchases.")
     }
 
-    private fun updateOrder(id: String, f: (FarmerOrder) -> FarmerOrder) {
-        farmerOrders = farmerOrders.map { if (it.id == id) f(it).also { o -> db.saveOrder(o) } else it }
-        selectedOrderForView = selectedOrderForView?.let { v -> farmerOrders.firstOrNull { it.id == v.id } }
-        selectedOrderForTracking = selectedOrderForTracking?.let { v -> farmerOrders.firstOrNull { it.id == v.id } }
-    }
-
-    /** Keeps the tracking timeline in step with the fulfillment status (the last step is the tourist's own confirmation). */
-    private fun syncSteps(o: FarmerOrder, status: String): FarmerOrder {
-        if (o.isReceivedByUser) return o.copy(fulfillmentStatus = "Delivered")
-        val reached = when (status) { "Pending Packing" -> 0; "Packed" -> 1; "Dispatched" -> 2; "Out for Delivery" -> 3; "Delivered" -> 3; else -> return o.copy(fulfillmentStatus = status) }
-        val stamp = nowStamp()
-        val last = o.deliverySteps.lastIndex
-        return o.copy(fulfillmentStatus = status, deliverySteps = o.deliverySteps.mapIndexed { i, st ->
-            when {
-                i == last -> st
-                i <= reached && !st.completed -> st.copy(completed = true, timestamp = stamp)
-                i > reached && st.completed && i > 0 -> st.copy(completed = false, timestamp = "Pending")
-                else -> st
-            }
-        })
-    }
+    /** Backwards-compatible alias used by older call sites; same cancelled-tourist-only rule. */
+    fun deleteOrder(id: String) = deletePurchase(id)
 
     fun orderStatusUpdate(id: String, status: String) {
-        if (denied(order(id)?.let(::canManageOrder) == true, "update this order")) return
-        if (order(id)?.fulfillmentStatus == "Cancelled") { showToast("This order was cancelled."); return }
-        updateOrder(id) { syncSteps(it, status) }
-        showToast("Order #$id status updated to: $status")
-    }
-
-    fun confirmOrderReceived(id: String) {
-        if (denied(order(id)?.let(::canViewOrder) == true, "confirm this order")) return
-        if (farmerOrders.firstOrNull { it.id == id }?.isReceivedByUser != false) return
-        val ts = nowStamp()
-        updateOrder(id) { o ->
-            o.copy(
-                fulfillmentStatus = "Delivered", isReceivedByUser = true, receivedAt = ts,
-                receivedByRecipient = "${o.customerName} (Confirmed Delivery Handover)",
-                currentLocation = "Delivered at ${o.customerAddress}",
-                deliverySteps = o.deliverySteps.mapIndexed { i, s ->
-                    when {
-                        i == o.deliverySteps.lastIndex -> s.copy(completed = true, timestamp = ts, notes = "Verified & received by ${o.customerName}")
-                        !s.completed -> s.copy(completed = true, timestamp = ts)
-                        else -> s
-                    }
-                },
-            )
+        if (status == "Cancelled") {
+            cancelOrder(id)
+            return
         }
-        notifyFarms(order(id)?.let(::farmsOf).orEmpty(), AppNotification(System.currentTimeMillis(), "Order Delivered & Received by Tourist!",
-            "Customer confirmed receiving Order #$id in good condition.",
-            "Eco-tourist customer confirmed receiving the delivered organic farm produce in fresh condition. Reference #$id. Handover verified.",
-            nowStamp(), false, "farmer_order", "farmer"))
-        showToast("Package marked as Received! Thank you for supporting our local farmers.")
-    }
-
-    fun updateDeliveryLocation(id: String, location: String, status: String? = null) {
-        if (denied(order(id)?.let(::canManageOrder) == true, "update this delivery")) return
-        updateOrder(id) { o -> (if (status != null) syncSteps(o, status) else o).copy(currentLocation = location) }
-        showToast("Delivery location updated for order #$id.")
+        val o = order(id) ?: return
+        if (denied(canActOnOrder(o), "confirm this order")) return
+        if (status != "Confirmed" || o.fulfillmentStatus != "Pending") {
+            showToast("Only pending orders can be confirmed.")
+            return
+        }
+        if (db.transitionOrderStatus(id, "Confirmed") == null) {
+            showToast("This order is no longer pending.")
+            return
+        }
+        farmerOrders = db.orders()
+        o.customerEmail?.takeIf { it.isNotBlank() }?.let { email ->
+            val productNames = o.items.joinToString { it.productName }
+            addNotification(AppNotification(System.currentTimeMillis(), "Order Confirmed!",
+                "Order Confirmed! Your order for $productNames has been confirmed by the farmer.",
+                "Order #${o.orderNumber} · Total: $PESO${money(o.totalAmount)} · Cash on Delivery.",
+                nowStamp(), false, "order", "tourist", recipientEmail = email, orderId = o.id,
+                eventKey = "order:${o.id}:confirmed"))
+        }
+        showToast("Order #${o.orderNumber} confirmed.")
     }
 
     // ---------------------------------------------------------------- notifications
@@ -1383,18 +1758,18 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (denied(canViewBooking(b), "view this receipt")) return
         val unit = (b.totalAmount.toDouble() / max(1, b.participants)).roundToInt().toDouble()
         selectedReceipt = Receipt(
-            "RCP-${b.bookingCode}", "${b.tourDate} · ${b.paymentMethod ?: "GCash"}", b.customerName,
+            "RCP-${b.bookingCode}", "${b.tourDate} · ${b.paymentMethod ?: PAY_AT_FARM_PAYMENT_METHOD}", b.customerName,
             b.customerPhone ?: "—", b.customerEmail ?: "Walk-in guest", b.farmName,
             farmOf(b)?.let { id -> farmers.firstOrNull { it.id == id }?.name } ?: b.assignedGuide ?: "Farm Host",
             listOf(ReceiptItem("${b.activity} (${b.tourTime})", b.participants, unit, b.totalAmount.toDouble())),
-            b.totalAmount.toDouble(), 0.0, b.totalAmount.toDouble(), b.paymentMethod ?: "GCash",
+            b.totalAmount.toDouble(), 0.0, b.totalAmount.toDouble(), b.paymentMethod ?: PAY_AT_FARM_PAYMENT_METHOD,
             when { b.status == "Cancelled" -> "CANCELLED"; isPayOnSite(b.paymentMethod) -> "TO BE PAID AT THE FARM"; else -> "PAID & CONFIRMED" },
             "AUTH-TK-${b.id}88", "tour_booking",
         )
     }
 
     fun printOrderReceipt(o: FarmerOrder) {
-        if (denied(canViewOrder(o), "view this receipt")) return
+        if (denied(isFarmer && canManageOrder(o), "print this receipt")) return
         val items = o.items.map { ReceiptItem(it.productName, it.qty, it.unitPrice, it.qty * it.unitPrice) }
         val sub = items.sumOf { it.total }
         val fee = (o.totalAmount - sub).coerceAtLeast(0.0)
@@ -1403,13 +1778,10 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             farmsOf(o).mapNotNull { id -> farmers.firstOrNull { it.id == id }?.farmName }.ifEmpty { listOf("AgriTourism Partner Farms") }.joinToString(" · "),
             farmsOf(o).mapNotNull { id -> farmers.firstOrNull { it.id == id }?.name }.ifEmpty { listOf("AgriTourism Philippines") }.joinToString(", "),
             items, sub, fee, sub + fee,
-            o.paymentMethod, o.paymentStatus.ifBlank { if (o.paymentMethod == "Cash on Delivery") "COD" else "PAID" }, "TXN-${o.orderNumber}-PH", "produce_order",
+            o.paymentMethod, o.paymentStatus.ifBlank { if (o.paymentMethod == COD_PAYMENT_METHOD) "COD" else "PAID" }, "TXN-${o.orderNumber}-PH", "produce_order",
         )
     }
 
-    private fun isPayOnSite(method: String?) = method in setOf("Pay at Farm", "Cash on Arrival")
+    private fun isPayOnSite(method: String?) = method == PAY_AT_FARM_PAYMENT_METHOD
 
-    fun currentTrackedOrder(): FarmerOrder? = visibleOrders.let { list ->
-        list.firstOrNull { it.id == activeTrackingOrderId || it.orderNumber == activeTrackingOrderId } ?: list.firstOrNull()
-    }
 }

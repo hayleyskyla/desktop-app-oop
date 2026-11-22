@@ -26,10 +26,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import ph.agritourism.model.Role
 import ph.agritourism.ui.dialogs.Overlays
 import ph.agritourism.ui.screens.*
@@ -70,17 +75,56 @@ private fun TopBar(s: AppState) {
         }
         Spacer(Modifier.weight(1f))
         androidx.compose.animation.AnimatedVisibility(
-            visible = s.isLoggedIn && s.activePage != Page.HOME,
+            visible = s.isLoggedIn,
             enter = fadeIn(androidx.compose.animation.core.tween(180)) + expandHorizontally(expandFrom = Alignment.Start),
             exit = fadeOut(androidx.compose.animation.core.tween(120)) + shrinkHorizontally(shrinkTowards = Alignment.Start),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SearchField(s.searchQuery, { s.searchQuery = it }, "Search tours, produce…", Modifier.width(280.dp))
+                Box {
+                    SearchField(s.searchQuery, { s.searchQuery = it }, "Search farms, tours, produce…",
+                        Modifier.width(280.dp).testTag("global-search"))
+                    if (s.searchQuery.isNotBlank()) {
+                        val popupOffset = with(LocalDensity.current) { IntOffset(0, 44.dp.roundToPx()) }
+                        Popup(
+                            alignment = Alignment.TopStart,
+                            offset = popupOffset,
+                            properties = PopupProperties(focusable = false),
+                        ) {
+                            Surface(
+                                Modifier.width(360.dp).heightIn(max = 360.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color.White,
+                                shadowElevation = 12.dp,
+                            ) {
+                                Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                                    if (s.searchResults.isEmpty()) {
+                                        Text("No results found", Modifier.fillMaxWidth().padding(16.dp), color = Palette.Muted)
+                                    } else {
+                                        s.searchResults.take(10).forEach { result ->
+                                            Row(
+                                                Modifier.fillMaxWidth().clickable { s.openSearchResult(result) }
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                AsyncImage(result.image, Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)))
+                                                Spacer(Modifier.width(10.dp))
+                                                Column {
+                                                    Text(result.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(result.subtitle, fontSize = 11.sp, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.width(12.dp))
             }
         }
         if (s.isLoggedIn) {
-            BadgedIcon(Icons.Outlined.Notifications, s.unreadCount, "Notifications") { s.isNotificationsOpen = !s.isNotificationsOpen }
+            BadgedIcon(Icons.Outlined.Notifications, s.unreadCount, "Notification") { s.isNotificationsOpen = !s.isNotificationsOpen }
             Spacer(Modifier.width(8.dp))
             if (s.isTourist) {
                 Row(Modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, Palette.Border, RoundedCornerShape(12.dp))
@@ -94,16 +138,6 @@ private fun TopBar(s: AppState) {
                 }
             }
             Spacer(Modifier.width(12.dp))
-            Row(Modifier.clip(RoundedCornerShape(12.dp)).handCursor().clickable { s.isProfileModalOpen = true }.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Avatar(s.avatar, 34.dp)
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text(s.displayName, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Palette.Deep)
-                    Text(s.userRole.subtitle, fontSize = 10.sp, color = Palette.Muted)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            SecondaryButton("Sign Out", icon = Icons.AutoMirrored.Outlined.Logout, color = Palette.Red) { s.signOut() }
         } else {
             SecondaryButton("Log In", icon = Icons.AutoMirrored.Outlined.Login) { s.navigate(Page.LOGIN) }
             Spacer(Modifier.width(8.dp))
@@ -150,39 +184,32 @@ private fun Sidebar(s: AppState) {
             fun item(icon: ImageVector, label: String, active: Boolean, badge: String? = null, onClick: () -> Unit) =
                 NavItem(icon, label, active, expanded, badge, onClick)
 
-            if (!s.isLoggedIn || s.activePage == Page.HOME) {
-                if (expanded) Text("CATALOG BROWSER", Modifier.padding(8.dp), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Muted)
-                val home = s.activePage == Page.HOME
-                item(Icons.Outlined.Layers, "All Showcase", home && s.showcaseCategory == ShowcaseCategory.ALL) { s.openShowcase(ShowcaseCategory.ALL) }
-                item(Icons.Outlined.Explore, "Farm Destinations", home && s.showcaseCategory == ShowcaseCategory.PLACES) { s.openShowcase(ShowcaseCategory.PLACES) }
-                item(Icons.Outlined.Agriculture, "Fresh Produce", home && s.showcaseCategory == ShowcaseCategory.PRODUCTS) { s.openShowcase(ShowcaseCategory.PRODUCTS) }
-                item(Icons.Outlined.Eco, "Fruit Orchards", home && s.showcaseCategory == ShowcaseCategory.ORCHARDS) { s.openShowcase(ShowcaseCategory.ORCHARDS) }
-                item(Icons.Outlined.HelpOutline, "Help & FAQs", s.activePage == Page.HELP) { s.navigate(Page.HELP) }
-                if (s.isLoggedIn) item(Icons.Outlined.Monitor, "Back to Dashboard", false) { s.navigate(Page.DASHBOARD) }
-            } else {
+            // The landing page has no navigation items; role navigation appears only after login.
+            if (s.isLoggedIn) {
                 item(Icons.Outlined.Layers, "Dashboard", s.activePage == Page.DASHBOARD) { s.navigate(Page.DASHBOARD) }
+                if (s.userRole == Role.ADMIN) {
+                    item(Icons.Outlined.Map, "Tour", s.activePage == Page.ADMIN_TOURS) { s.navigate(Page.ADMIN_TOURS) }
+                    item(Icons.Outlined.AutoAwesome, "Fruit Picking", s.activePage == Page.ADMIN_FRUIT_PICKING) { s.navigate(Page.ADMIN_FRUIT_PICKING) }
+                    item(Icons.Outlined.Agriculture, "Products", s.activePage == Page.ADMIN_PRODUCTS) { s.navigate(Page.ADMIN_PRODUCTS) }
+                }
                 if (s.userRole == Role.FARMER) {
                     item(Icons.Outlined.CalendarMonth, "Tourist Bookings & Check-In", s.activePage == Page.MY_BOOKINGS) { s.navigate(Page.MY_BOOKINGS) }
                     item(Icons.Outlined.ShoppingBag, "Tourist Orders", s.activePage == Page.FARMER_ORDERS, "${s.visibleOrders.size}") { s.navigate(Page.FARMER_ORDERS) }
                     item(Icons.Outlined.Agriculture, "My Produce Catalog", s.activePage == Page.FARMER_PRODUCTS) { s.navigate(Page.FARMER_PRODUCTS) }
                     item(Icons.Outlined.Person, "Farmer Profile & Catalog", s.activePage == Page.FARMER_PROFILE) { s.navigate(Page.FARMER_PROFILE) }
                     item(Icons.Outlined.Schedule, "Guides & Time Slots", s.activePage == Page.FARM_SETUP) { s.navigate(Page.FARM_SETUP) }
-                } else {
+                } else if (s.isTourist) {
                     item(Icons.Outlined.Explore, "Explore Tours", s.activePage == Page.FARM_DETAIL) { s.navigate(Page.FARM_DETAIL) }
                     item(Icons.Outlined.AutoAwesome, "Fruit Picking", s.activePage == Page.FRUIT_PICKING) { s.navigate(Page.FRUIT_PICKING) }
                     item(Icons.Outlined.Agriculture, "Vegetables & Harvest", s.activePage == Page.MARKET) { s.navigate(Page.MARKET) }
                     item(Icons.AutoMirrored.Outlined.MenuBook, "Farmers & Stories", s.activePage == Page.FARMERS_STORIES, "Profiles") { s.navigate(Page.FARMERS_STORIES) }
-                    item(Icons.Outlined.CalendarMonth, if (s.isAdmin) "All Bookings" else "My Bookings", s.activePage == Page.MY_BOOKINGS) { s.navigate(Page.MY_BOOKINGS) }
-                    item(Icons.Outlined.LocalShipping, "Delivery Tracking", s.activePage == Page.ORDER_TRACKING, "Live") { s.navigate(Page.ORDER_TRACKING) }
+                    item(Icons.Outlined.CalendarMonth, "My Bookings", s.activePage == Page.MY_BOOKINGS) { s.navigate(Page.MY_BOOKINGS) }
+                    item(Icons.Outlined.FavoriteBorder, "My Wishlist", s.activePage == Page.WISHLIST) { s.navigate(Page.WISHLIST) }
+                    item(Icons.Outlined.ShoppingBag, "My Purchases", s.activePage == Page.MY_PURCHASES, "${s.visibleOrders.size}") { s.navigate(Page.MY_PURCHASES) }
                 }
-                if (s.isAdmin) {
-                    item(Icons.Outlined.ShoppingBag, "All Orders", s.activePage == Page.FARMER_ORDERS, "${s.farmerOrders.size}") { s.navigate(Page.FARMER_ORDERS) }
-                    item(Icons.Outlined.Agriculture, "Produce Catalog", s.activePage == Page.FARMER_PRODUCTS) { s.navigate(Page.FARMER_PRODUCTS) }
-                    item(Icons.Outlined.Schedule, "Guides & Time Slots", s.activePage == Page.FARM_SETUP) { s.navigate(Page.FARM_SETUP) }
-                    item(Icons.Outlined.Settings, "Platform Settings", s.activePage == Page.PLATFORM_SETTINGS) { s.navigate(Page.PLATFORM_SETTINGS) }
-                    item(Icons.Outlined.Storage, "SQL Database", s.activePage == Page.SQL_STUDIO) { s.navigate(Page.SQL_STUDIO) }
+                if (s.userRole != Role.ADMIN) {
+                    item(Icons.Outlined.HelpOutline, "Help & FAQs", s.activePage == Page.HELP) { s.navigate(Page.HELP) }
                 }
-                item(Icons.Outlined.HelpOutline, "Help & FAQs", s.activePage == Page.HELP) { s.navigate(Page.HELP) }
             }
             if (s.isLoggedIn && s.userRole == Role.FARMER && expanded) {
                 Spacer(Modifier.height(12.dp))
@@ -191,10 +218,23 @@ private fun Sidebar(s: AppState) {
             }
         }
         HorizontalDivider(color = Palette.Border)
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (s.isLoggedIn) {
-                Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).handCursor().clickable { s.isProfileModalOpen = true }, verticalAlignment = Alignment.CenterVertically) {
-                    Avatar(s.avatar, 40.dp)
+        // The account block is one bottom row: profile on the left, exit arrow directly opposite on the right.
+        // Sizes adapt to the collapsed dock so the two controls never overlap.
+        val avatarSize = if (expanded) 40.dp else 28.dp
+        val logoutButtonSize = if (expanded) 40.dp else 32.dp
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = if (expanded) 14.dp else 6.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val profileModifier = Modifier.weight(1f).then(
+                if (s.isTourist) {
+                    Modifier.handCursor().clickable { s.isProfileModalOpen = true }.testTag("tourist-profile")
+                } else Modifier.testTag("sidebar-profile")
+            )
+            Row(profileModifier, verticalAlignment = Alignment.CenterVertically) {
+                if (s.isLoggedIn) {
+                    Avatar(s.avatar, avatarSize)
                     AnimatedVisibility(expanded, enter = fadeIn(androidx.compose.animation.core.tween(220, 90)), exit = fadeOut(androidx.compose.animation.core.tween(90))) {
                         Row {
                             Spacer(Modifier.width(10.dp))
@@ -204,13 +244,27 @@ private fun Sidebar(s: AppState) {
                             }
                         }
                     }
+                } else {
+                    Icon(Icons.Outlined.Monitor, null, tint = Palette.Forest)
+                    if (expanded) {
+                        Spacer(Modifier.width(10.dp))
+                        Text("Catalog Preview", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
-                if (expanded) IconButton({ s.signOut() }, Modifier.handCursor()) { Icon(Icons.AutoMirrored.Outlined.Logout, "Sign Out", tint = Palette.Muted) }
-            } else {
-                Icon(Icons.Outlined.Monitor, null, tint = Palette.Forest)
-                if (expanded) {
-                    Spacer(Modifier.width(10.dp))
-                    Column { Text("Catalog Preview", fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("Pictures & Descriptions", fontSize = 11.sp, color = Palette.Muted) }
+            }
+            if (s.isLoggedIn) {
+                val logoutTag = if (s.userRole == Role.ADMIN) "admin-logout" else "sidebar-logout"
+                TooltipArea(tooltip = {
+                    Surface(shape = RoundedCornerShape(8.dp), color = Palette.Deep, shadowElevation = 6.dp) {
+                        Text("Log Out", Modifier.padding(8.dp), color = Color.White, fontSize = 12.sp)
+                    }
+                }) {
+                    IconButton(
+                        onClick = { s.signOut() },
+                        modifier = Modifier.handCursor().size(logoutButtonSize).clip(RoundedCornerShape(12.dp)).testTag(logoutTag),
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.Logout, "Log Out", tint = Palette.Forest)
+                    }
                 }
             }
         }
@@ -279,17 +333,20 @@ private fun PageContent(s: AppState) {
                 p == Page.MARKET -> MarketPage(s)
                 p == Page.FARMERS_STORIES -> FarmersStoriesPage(s)
                 p == Page.CART_CHECKOUT -> CheckoutPage(s)
-                p == Page.ORDER_TRACKING -> OrderTrackingPage(s)
                 p == Page.MY_BOOKINGS -> MyBookingsPage(s)
+                p == Page.MY_PURCHASES -> MyPurchasesPage(s)
+                p == Page.WISHLIST -> WishlistPage(s)
                 p == Page.FARMER_ORDERS -> FarmerOrdersPage(s)
                 p == Page.FARMER_PRODUCTS -> FarmerProductsPage(s)
                 p == Page.HOME -> CatalogHome(s)
                 p == Page.SIGNUP -> SignupPage(s)
                 p == Page.LOGIN -> LoginPage(s)
                 p == Page.FARMER_PROFILE -> FarmerProfilePage(s)
-                p == Page.SQL_STUDIO -> SqlStudioPage(s)
                 p == Page.FARM_SETUP -> FarmSetupPage(s)
                 p == Page.PLATFORM_SETTINGS -> PlatformSettingsPage(s)
+                p == Page.ADMIN_TOURS -> AdminToursPage(s)
+                p == Page.ADMIN_FRUIT_PICKING -> AdminFruitPickingPage(s)
+                p == Page.ADMIN_PRODUCTS -> AdminProductsPage(s)
                 p == Page.HELP -> HelpPage(s)
             }
         }
@@ -303,7 +360,7 @@ private fun AccessDeniedNotice(s: AppState) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(44.dp), tint = Palette.Muted)
             H2(if (s.isLoggedIn) "Access restricted" else "Please log in")
             Sub(if (s.isLoggedIn) "Your ${s.userRole.subtitle} account does not have permission to view this page." else "You need to log in to view this page.")
-            if (s.isLoggedIn) PrimaryButton("Back to Dashboard") { s.navigate(Page.DASHBOARD) }
+            if (s.isLoggedIn) TextAction("Back") { s.navigate(Page.DASHBOARD) }
             else PrimaryButton("Log In") { s.navigate(Page.LOGIN) }
         }
     }
@@ -321,7 +378,7 @@ private fun Toast(s: AppState, modifier: Modifier) {
             Spacer(Modifier.width(10.dp))
             Text(msg.orEmpty(), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Spacer(Modifier.width(12.dp))
-            Icon(Icons.Filled.Close, "Dismiss", Modifier.size(16.dp).clip(CircleShape).handCursor().clickable { s.toastMessage = null }, tint = Color.White.copy(alpha = 0.7f))
+            TextAction("Close", color = Color.White.copy(alpha = 0.8f)) { s.toastMessage = null }
         }
     }
 }

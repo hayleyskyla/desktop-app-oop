@@ -1,5 +1,6 @@
 package ph.agritourism.ui.screens
 
+import ph.agritourism.model.TourPriceStatus
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,10 +44,11 @@ private fun PageHeader(title: String, sub: String, tag: String? = null) {
 fun ExploreTours(s: AppState) {
     PageHeader("Explore Philippine Farm Tours",
         "Handpicked eco-sanctuaries, heritage agro-trails, and scenic mountain farms across ${s.provinces.joinToString()}",
-        "${s.tours.size} Verified Destinations")
+        "${s.tours.count { it.priceStatus == TourPriceStatus.VERIFIED }} Published rates · ${s.tours.count { it.priceStatus == TourPriceStatus.ESTIMATED }} estimated")
     Grid(s.tours, 3) { t ->
         PhotoCard(t.imageUrl, t.name, t.location.substringBefore(","), t.rating, t.reviewsCount, t.pricePerPerson, t.id.toLong() in s.favoriteIds,
-            { s.toggleFavorite(t.id.toLong(), t.name) }) { s.selectedTour = t; s.isTourModalOpen = true }
+            { s.toggleFavorite(t.id.toLong(), t.name) }, { s.selectedTour = t; s.isTourModalOpen = true },
+            if (t.bookingEnabled) null else "Bookings unavailable")
     }
 }
 
@@ -58,7 +60,59 @@ fun FruitPickingPage(s: AppState) {
     Grid(s.fruitPicking, 3) { f ->
         val favId = f.id + 100L
         PhotoCard(f.imageUrl, f.title, f.location.substringBefore(","), f.rating, f.reviewsCount, f.pricePerPerson, favId in s.favoriteIds,
-            { s.toggleFavorite(favId, f.title) }) { s.selectedFruit = f; s.isFruitModalOpen = true }
+            { s.toggleFavorite(favId, f.title) }, { s.selectedFruit = f; s.isFruitModalOpen = true })
+    }
+}
+
+@Composable
+fun WishlistPage(s: AppState) {
+    val tours = s.allTours.filter { it.id.toLong() in s.favoriteIds }
+    val orchards = s.allOrchards.filter { it.id + 100L in s.favoriteIds }
+    PageHeader("My Wishlist", "${tours.size + orchards.size} saved farm experience(s)")
+    if (tours.isEmpty() && orchards.isEmpty()) {
+        GlassCard(Modifier.fillMaxWidth(), padding = 32.dp) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.FavoriteBorder, null, Modifier.size(42.dp), tint = Palette.Muted)
+                Sub("Your wishlist is empty. Save a farm or orchard with its heart button.")
+                PrimaryButton("Explore Farm Tours", icon = Icons.Outlined.Explore) { s.navigate(Page.FARM_DETAIL) }
+            }
+        }
+    } else {
+        if (tours.isNotEmpty()) {
+            SectionHeader("Farm Tours", "Tap a saved destination to view its tour details")
+            Grid(tours, 2) { tour ->
+                WishlistCard(tour.imageUrl, tour.name, tour.location, tour.description,
+                    { s.selectedTour = tour; s.isTourModalOpen = true },
+                    { s.toggleFavorite(tour.id.toLong(), tour.name) })
+            }
+        }
+        if (orchards.isNotEmpty()) {
+            SectionHeader("Fruit-Picking Experiences", "Tap a saved orchard to view its harvesting details")
+            Grid(orchards, 2) { orchard ->
+                WishlistCard(orchard.imageUrl, orchard.title, "${orchard.farmName} · ${orchard.location}",
+                    "${orchard.fruitName} · ${orchard.duration}",
+                    { s.selectedFruit = orchard; s.isFruitModalOpen = true },
+                    { s.toggleFavorite(orchard.id + 100L, orchard.title) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun WishlistCard(image: String, title: String, location: String, details: String, onOpen: () -> Unit, onRemove: () -> Unit) {
+    GlassCard(padding = 0.dp, onClick = onOpen) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(image, Modifier.size(112.dp).clip(RoundedCornerShape(14.dp)), contentDescription = title)
+            Column(Modifier.weight(1f).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, fontWeight = FontWeight.ExtraBold, color = Palette.Deep, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(location, fontSize = 11.sp, color = Palette.Forest, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(details, fontSize = 12.sp, color = Palette.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text("Open details →", fontSize = 12.sp, color = Palette.Forest, fontWeight = FontWeight.Bold)
+            }
+            IconButton(onRemove, Modifier.handCursor()) {
+                Icon(Icons.Filled.Favorite, "Remove $title from wishlist", tint = Color(0xFFEF4444))
+            }
+        }
     }
 }
 
@@ -78,7 +132,7 @@ fun MarketPage(s: AppState) {
         Text("Harvest deals: up to ${s.maxDiscount}% OFF on ${s.products.count { it.stock > 0 && it.discountPercent > 0 }} products, applied automatically!", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Palette.Deep)
         Pill("Direct Farm-to-Table", Color.White)
     }
-    if (s.filteredProducts.isEmpty()) Sub("No products match your search.")
+    if (s.filteredProducts.isEmpty()) Sub("No results found for your product search.")
     Grid(s.filteredProducts, 4) { p -> ProductCard(s, p) }
 }
 
@@ -87,7 +141,7 @@ fun ProductCard(s: AppState, p: Product) {
     val inCart = s.cart.firstOrNull { it.product.id == p.id }?.quantity ?: 0
     val soldOut = p.stock <= 0
     val limit = inCart >= p.stock
-    GlassCard(padding = 0.dp) {
+    GlassCard(padding = 0.dp, onClick = { s.openCatalogProduct(p) }) {
         Box(Modifier.fillMaxWidth().height(160.dp)) {
             AsyncImage(p.imageUrl, Modifier.fillMaxSize())
             if (p.discountPercent > 0) Pill("${p.discountPercent}% OFF", Color(0xFFDC2626), Color.White, Modifier.align(Alignment.TopStart).padding(10.dp))
@@ -149,7 +203,7 @@ fun FarmersStoriesPage(s: AppState) {
                 AsyncImage(f.farmBannerUrl, Modifier.fillMaxSize(), fallback = s.images.farmerProfileBanner)
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B2512)))))
                 Row(Modifier.align(Alignment.TopStart).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Pill("📍 ${f.location}", Color.White.copy(alpha = 0.9f)); Pill(f.generation, Color(0xFFFEF3C7), Color(0xFF92400E))
+                    Pill(f.location, Color.White.copy(alpha = 0.9f)); Pill(f.generation, Color(0xFFFEF3C7), Color(0xFF92400E))
                 }
                 Row(Modifier.align(Alignment.BottomStart).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Avatar(f.photoUrl, 64.dp)
@@ -158,7 +212,7 @@ fun FarmersStoriesPage(s: AppState) {
                 }
             }
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Pill(f.roleTitle); Pill("🏅 ${f.yearsExperience} Years Farming", Color(0xFFFEF3C7), Color(0xFF92400E)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Pill(f.roleTitle); Pill("${f.yearsExperience} Years Farming", Color(0xFFFEF3C7), Color(0xFF92400E)) }
                 Text("\"${f.storyQuote}\"", fontStyle = FontStyle.Italic, fontSize = 13.sp, color = Color(0xFF334155), maxLines = 3, overflow = TextOverflow.Ellipsis)
                 Label("Certified Sustainable Practices:")
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { f.sustainablePractices.take(3).forEach { Pill("✓ $it", Color(0xFFF0FDF4), Color(0xFF166534)) } }
@@ -194,49 +248,47 @@ fun CatalogHome(s: AppState) {
             AsyncImage(s.images.farmLifeBannerPhoto, Modifier.fillMaxSize(), contentDescription = "Philippine farm")
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xE60B2512), Color(0x660B2512)))))
             Column(Modifier.align(Alignment.CenterStart).padding(32.dp).widthIn(max = 640.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Pill("Welcome to AgriTourism Philippines", Color.White.copy(alpha = 0.15f), Color(0xFFBBF7D0))
-                Text("Visit local farms, pick your own fruit and buy fresh harvests", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                Text("Browse every farm, product and orchard below. Click any picture to read its full description. Log in when you're ready to book or buy.",
-                    color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp)
+                Text("AgriTourism Philippines", fontSize = 30.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text("Visit local farms, pick your own fruit and buy fresh harvests", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PrimaryButton("Go to Login Page to Explore More", icon = Icons.AutoMirrored.Outlined.Login, color = Color(0xFF22C55E)) { s.navigate(Page.LOGIN) }
+                    PrimaryButton("Explore More", icon = Icons.AutoMirrored.Outlined.Login, color = Color(0xFF22C55E)) { s.navigate(Page.LOGIN) }
                     PrimaryButton("Create Account", icon = Icons.Outlined.PersonAdd, color = Color.White.copy(alpha = 0.18f)) { s.navigate(Page.SIGNUP) }
                 }
             }
         }
     }
-    GlassCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { H1("AgriTourism Desktop Catalog"); Sub("Browse farm destinations, local farm products, and fruit orchards (Picture & Description View)") }
-            FilterChipRow(listOf("ALL", "PLACES", "PRODUCTS", "ORCHARDS"), s.showcaseCategory.name,
-                { mapOf("ALL" to "All", "PLACES" to "Destinations", "PRODUCTS" to "Products", "ORCHARDS" to "Orchards")[it]!! }) { s.showcaseCategory = ShowcaseCategory.valueOf(it) }
-            Spacer(Modifier.width(12.dp))
-            SearchField(s.searchQuery, { s.searchQuery = it }, "Filter farms or products…", Modifier.width(240.dp))
-        }
-    }
     val q = s.searchQuery.trim()
     val cat = s.showcaseCategory
+    val matchingTours = s.tours.filter { q.isEmpty() || it.name.contains(q, true) || it.location.contains(q, true) || it.description.contains(q, true) }
+    val matchingProducts = s.products.filter { q.isEmpty() || it.name.contains(q, true) || it.farmOrigin.contains(q, true) || it.description.contains(q, true) }
+    val matchingOrchards = s.fruitPicking.filter { q.isEmpty() || it.farmName.contains(q, true) || it.fruitName.contains(q, true) || it.description.contains(q, true) }
+    val noMatches = (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.PLACES) && matchingTours.isNotEmpty() ||
+        (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.PRODUCTS) && matchingProducts.isNotEmpty() ||
+        (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.ORCHARDS) && matchingOrchards.isNotEmpty()
+    if (q.isNotEmpty() && !noMatches) Sub("No results found for \"$q\".")
     if (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.PLACES) {
         SectionHeader("Farm Destinations", "Sustainable agro-estates and eco-sanctuaries across the Philippines")
-        Grid(s.tours.filter { q.isEmpty() || it.name.contains(q, true) || it.location.contains(q, true) || it.description.contains(q, true) }, 3) { t ->
+        Grid(matchingTours, 3) { t ->
             ShowcaseCard(t.imageUrl, t.location, t.name, t.description) { s.openCatalogTour(t) }
         }
     }
     if (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.PRODUCTS) {
         SectionHeader("Fresh Produce from Local Farms", "Naturally cultivated organic crops and artisanal agricultural products")
-        Grid(s.products.filter { q.isEmpty() || it.name.contains(q, true) || it.farmOrigin.contains(q, true) || it.description.contains(q, true) }, 4) { p ->
+        Grid(matchingProducts, 4) { p ->
             ShowcaseCard(p.imageUrl, p.farmOrigin, p.name, p.description, 140) { s.openCatalogProduct(p) }
         }
     }
     if (cat == ShowcaseCategory.ALL || cat == ShowcaseCategory.ORCHARDS) {
         SectionHeader("Tree-to-Basket Fruit Orchards", "Lush Philippine fruit orchards for seasonal harvesting")
-        Grid(s.fruitPicking.filter { q.isEmpty() || it.farmName.contains(q, true) || it.fruitName.contains(q, true) || it.description.contains(q, true) }, 3) { o ->
+        Grid(matchingOrchards, 3) { o ->
             ShowcaseCard(o.imageUrl, o.fruitName.ifBlank { o.title }, o.farmName, "${o.location}\n${o.description}") { s.openCatalogOrchard(o) }
         }
     }
     SectionHeader("What Tourists Say", "Reviews from visitors to our partner farms") { Pill("${s.reviews.size} reviews") }
     TouristReviewGrid(s.reviews.sortedByDescending { it.id }.take(6))
-    FaqSection(s)
+    // FAQs remain available to signed-in farmers and tourists only; the opening page and
+    // administrator interface stay free of FAQ navigation and sections.
+    if (s.isLoggedIn && !s.isAdmin) FaqSection(s)
 }
 
 @Composable

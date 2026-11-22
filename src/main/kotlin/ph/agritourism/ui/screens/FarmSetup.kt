@@ -10,20 +10,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ph.agritourism.model.Courier
 import ph.agritourism.ui.*
 
-/** Farmers manage their farm's guides and time slots; admins can pick any farm. */
+/** Farmers set their own operating hours, generate time slots, and assign guides. */
 @Composable
 fun FarmSetupPage(s: AppState) {
-    var farmId by remember { mutableStateOf(s.myFarmId ?: s.farmers.firstOrNull()?.id) }
+    val id = s.myFarmId ?: run { Sub("No farm is linked to this account."); return }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { H1("Guides & Time Slots"); Sub("Who guides your visitors, and when tourists can book each tour or orchard") }
-        if (s.isAdmin && s.farmers.isNotEmpty()) {
-            Dropdown("Farm", s.farmers.map { it.id }, farmId ?: s.farmers.first().id, { id -> s.farmers.first { it.id == id }.farmName }, Modifier.width(320.dp)) { farmId = it }
-        }
+        Column(Modifier.weight(1f)) { H1("Guides & Time Slots"); Sub("Set opening and closing times, generate bookable slots, and assign guides for your tours and fruit picking") }
     }
-    val id = farmId ?: run { Sub("No farm is linked to this account."); return }
     GuidesCard(s, id)
     val tours = s.tours.filter { it.farmerId == id }
     val orchards = s.fruitPicking.filter { it.farmerId == id }
@@ -58,8 +53,9 @@ private fun SlotsCard(s: AppState, type: String, activityId: Int, title: String)
     var error by remember(type, activityId) { mutableStateOf<String?>(null) }
     val add = { error = s.addTimeSlot(type, activityId, label); if (error == null) label = "" }
     GlassCard(Modifier.fillMaxWidth()) {
-        SectionHeader(title, if (type == "tour") "Farm tour time slots" else "Fruit picking time slots")
+        SectionHeader(title, if (type == "tour") "Farm tour operating hours and time slots" else "Fruit picking operating hours and time slots")
         Spacer(Modifier.height(10.dp))
+        AutoScheduleEditor(s, type, activityId)
         val slots = s.timeSlots.filter { it.activityType == type && it.activityId == activityId }
         if (slots.isEmpty()) Sub("No time slots yet. Tourists can't book this until you add one.")
         slots.forEach { t -> ListRow(t.label, Icons.Outlined.Schedule) { s.removeTimeSlot(t) } }
@@ -69,6 +65,35 @@ private fun SlotsCard(s: AppState, type: String, activityId: Int, title: String)
             PrimaryButton("Add Slot", icon = Icons.Outlined.Add, enabled = label.isNotBlank()) { add() }
         }
         ErrorBanner(error)
+    }
+}
+
+/** Farmer tool: set opening/closing time and slot length, then regenerate only unbooked slots. */
+@Composable
+private fun AutoScheduleEditor(s: AppState, type: String, activityId: Int) {
+    val saved = s.operatingSchedule(type, activityId)
+    val tour = if (type == "tour") s.tours.firstOrNull { it.id == activityId } else null
+    var open by remember(type, activityId, saved?.open) {
+        mutableStateOf(saved?.open ?: tour?.operatingHours?.substringBefore(" - ")?.trim()?.takeIf { it.isNotBlank() } ?: "08:00 AM")
+    }
+    var close by remember(type, activityId, saved?.close) {
+        mutableStateOf(saved?.close ?: tour?.operatingHours?.substringAfter(" - ")?.trim()?.takeIf { it.isNotBlank() && it != tour?.operatingHours } ?: "05:00 PM")
+    }
+    var minutes by remember(type, activityId, saved?.slotMinutes) { mutableStateOf((saved?.slotMinutes ?: 60).toString()) }
+    var genError by remember(type, activityId) { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Label("Opening hours & generated slots")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+            Field("Opening time", open, { open = it; genError = null }, Modifier.weight(1f), "08:00 AM", icon = Icons.Outlined.Schedule)
+            Field("Closing time", close, { close = it; genError = null }, Modifier.weight(1f), "05:00 PM", icon = Icons.Outlined.Schedule)
+            Field("Slot minutes", minutes, { minutes = it.filter(Char::isDigit); genError = null }, Modifier.width(120.dp), "60", number = true)
+            PrimaryButton("Generate", icon = Icons.Outlined.Autorenew) {
+                genError = s.saveOperatingSchedule(type, activityId, open, close, minutes.toIntOrNull() ?: 0)
+            }
+        }
+        if (saved != null) Sub("Saved hours: ${saved.open}–${saved.close}, one slot every ${saved.slotMinutes} min. Slots attached to active bookings are preserved.")
+        ErrorBanner(genError)
+        HorizontalDivider(color = Palette.Border)
     }
 }
 
@@ -85,21 +110,15 @@ private fun ListRow(text: String, icon: androidx.compose.ui.graphics.vector.Imag
 
 private val SETTING_LABELS = listOf(
     "delivery_fee" to "Delivery fee (₱)",
-    "delivery_eta" to "Delivery time estimate",
     "product_categories" to "Product categories (comma-separated)",
-    "gcash_merchant_name" to "GCash merchant name",
-    "gcash_number" to "GCash mobile number",
-    "bank_name" to "Bank name",
-    "bank_account_name" to "Bank account name",
-    "bank_account_number" to "Bank account number",
 )
 
-/** Admin: couriers and platform settings. */
+/** Admin: checkout and catalog settings. */
 @Composable
 fun PlatformSettingsPage(s: AppState) {
-    Column { H1("Platform Settings"); Sub("Delivery, payment details and courier partners used across the app") }
+    Column { H1("Platform Settings"); Sub("Marketplace checkout and product catalog configuration") }
     GlassCard(Modifier.fillMaxWidth()) {
-        SectionHeader("Delivery & Payment", "Shown at checkout and on new orders")
+        SectionHeader("Order & Catalog", "Shown at checkout and on new produce orders")
         Spacer(Modifier.height(10.dp))
         SETTING_LABELS.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -108,34 +127,6 @@ fun PlatformSettingsPage(s: AppState) {
             }
             Spacer(Modifier.height(10.dp))
         }
-    }
-    GlassCard(Modifier.fillMaxWidth()) {
-        SectionHeader("Courier Partners", "New orders are assigned to these couriers in turn")
-        Spacer(Modifier.height(10.dp))
-        if (s.couriers.isEmpty()) Sub("No couriers yet. New orders will show \"Courier not yet assigned\".")
-        s.couriers.forEach { c -> ListRow("${c.riderName} · ${c.company} · ${c.riderPhone} · ${c.vehicle} · ${c.hub}", Icons.Outlined.LocalShipping) { s.removeCourier(c) } }
-        Spacer(Modifier.height(12.dp))
-        var company by remember { mutableStateOf("") }
-        var rider by remember { mutableStateOf("") }
-        var phone by remember { mutableStateOf("") }
-        var vehicle by remember { mutableStateOf("") }
-        var hub by remember { mutableStateOf("") }
-        var error by remember { mutableStateOf<String?>(null) }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field("Company", company, { company = it; error = null }, Modifier.weight(1f), "e.g. FarmLink Couriers")
-            Field("Rider name", rider, { rider = it; error = null }, Modifier.weight(1f), "e.g. Kuya Arnel Cruz")
-            Field("Rider phone", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" }; error = null }, Modifier.weight(1f), "+63 9xx xxx xxxx")
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field("Vehicle", vehicle, { vehicle = it }, Modifier.weight(1f), "e.g. Motorbike with cooler · Plate ABC 123")
-            Field("Pickup hub", hub, { hub = it }, Modifier.weight(1f), "e.g. Calamba Farm Hub")
-            PrimaryButton("Add Courier", icon = Icons.Outlined.Add) {
-                error = s.addCourier(Courier(0, company, rider, phone, vehicle, hub))
-                if (error == null) { company = ""; rider = ""; phone = ""; vehicle = ""; hub = "" }
-            }
-        }
-        ErrorBanner(error)
     }
 }
 

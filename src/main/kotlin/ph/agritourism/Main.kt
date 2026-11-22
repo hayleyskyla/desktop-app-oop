@@ -31,29 +31,13 @@ fun main() {
                     }
                     Item("Reload Data from SQLite", shortcut = KeyShortcut(Key.R, ctrl = true)) { state.reloadFromDb() }
                     Separator()
-                    Item("Exit Desktop App") { db.close(); exitApplication() }
-                }
-                Menu("Catalog", mnemonic = 'C') {
-                    Item("All Showcase Catalog") { state.openShowcase(ShowcaseCategory.ALL) }
-                    Item("Farm Destinations (Places)") { state.openShowcase(ShowcaseCategory.PLACES) }
-                    Item("Fresh Produce Catalog") { state.openShowcase(ShowcaseCategory.PRODUCTS) }
-                    Item("Fruit Orchards Catalog") { state.openShowcase(ShowcaseCategory.ORCHARDS) }
+                    Item("Exit") { db.close(); exitApplication() }
                 }
                 Menu("View", mnemonic = 'V') {
                     Item(if (state.isSidebarCollapsed) "Expand Left Dock" else "Collapse Left Dock") { state.isSidebarCollapsed = !state.isSidebarCollapsed }
                     if (state.isLoggedIn) Item("Go to Workspace Dashboard") { state.navigate(Page.DASHBOARD) }
                     Item("Reset Search & Filters") { state.searchQuery = ""; state.marketFilter = "All"; state.showToast("Filters cleared.") }
                     Item("Design Mockups Gallery") { state.isMockupDrawerOpen = true }
-                    if (state.isAdmin) Item("SQL Database Studio") { state.navigate(Page.SQL_STUDIO) }
-                }
-                Menu("Account", mnemonic = 'A') {
-                    if (state.isLoggedIn) {
-                        Item("My Desktop Profile") { state.isProfileModalOpen = true }
-                        Item("Sign Out") { state.signOut() }
-                    } else {
-                        Item("Log In to Account") { state.navigate(Page.LOGIN) }
-                        Item("Create New Account") { state.navigate(Page.SIGNUP) }
-                    }
                 }
             }
             MaterialTheme(colorScheme = AppColors) { AppShell(state) }

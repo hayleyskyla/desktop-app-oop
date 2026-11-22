@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ph.agritourism.model.PAY_AT_FARM_PAYMENT_METHOD
 import ph.agritourism.model.Role
 import ph.agritourism.ui.*
 
@@ -36,7 +37,7 @@ fun MyBookingsPage(s: AppState) {
             if (farmer) {
                 SecondaryButton("Print Guest Manifest", icon = Icons.Outlined.Download) { Printing.openHtml("guest-manifest.html", Printing.manifestHtml(s.visibleBookings, s.myFarmLabel)) }
                 PrimaryButton("Add Walk-in Tour", icon = Icons.Filled.Add) { s.isAddBookingModalOpen = true }
-            } else PrimaryButton("Book New Tour", icon = Icons.Filled.Add) { s.navigate(Page.FARM_DETAIL) }
+            } else if (!s.isAdmin) PrimaryButton("Book New Tour", icon = Icons.Filled.Add) { s.navigate(Page.FARM_DETAIL) }
         }
     }
     val tabs = listOf("All", "Confirmed", "Pending", "Cancelled")
@@ -78,7 +79,7 @@ fun MyBookingsPage(s: AppState) {
                 Column(horizontalAlignment = Alignment.End) {
                     Label("Total Payment")
                     Text("$PESO${money(b.totalAmount)}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
-                    Sub("Paid via ${b.paymentMethod ?: "GCash"}")
+                    Sub("Payment method: ${b.paymentMethod ?: PAY_AT_FARM_PAYMENT_METHOD}")
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -98,19 +99,19 @@ fun MyBookingsPage(s: AppState) {
                 if (s.ownsBooking(b)) PrimaryButton("Online Ticket", icon = Icons.Outlined.ConfirmationNumber) { s.selectedBookingForTicket = b }
                 SecondaryButton("Receipt", icon = Icons.Outlined.Print) { s.printTourReceipt(b) }
                 SecondaryButton(if (farmer) "View Dossier" else "View Voucher", icon = Icons.Outlined.Visibility) { s.selectedBookingForView = b }
-                if (b.status != "Cancelled") {
+                if (b.status != "Cancelled" && (s.ownsBooking(b) || s.canActOnBooking(b))) {
                     SecondaryButton("Update", icon = Icons.Outlined.Edit) { s.editingBooking = b.copy() }
                     SecondaryButton("Cancel", icon = Icons.Outlined.Cancel, color = Color(0xFFB45309)) { s.cancelBooking(b.id) }
                 }
-                if (s.isAdmin || s.ownsBooking(b)) IconButton({ s.deletingBookingId = b.id }) { Icon(Icons.Outlined.Delete, "Delete booking from history", tint = Palette.Red) }
+                if (s.ownsBooking(b)) IconButton({ s.deletingBookingId = b.id }) { Icon(Icons.Outlined.Delete, "Delete booking from history", tint = Palette.Red) }
             }
             if (farmer) {
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF8FAFC)).padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Label("Tourist Uploads:")
-                    Pill("🛡 ${b.uploadedIdDoc ?: "No ID uploaded"}", Color.White)
-                    Pill("💳 ${b.uploadedReceiptDoc ?: b.paymentMethod ?: "Payment method not set"}", Color.White)
+                    Pill("ID: ${b.uploadedIdDoc ?: "No ID uploaded"}", Color.White)
+                    Pill("Payment: ${b.uploadedReceiptDoc ?: b.paymentMethod ?: "Payment method not set"}", Color.White)
                     val req = b.specialRequests
                     if (req != null) Text("\"$req\"", Modifier.weight(1f), fontSize = 11.sp, fontStyle = FontStyle.Italic, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     else Spacer(Modifier.weight(1f))
@@ -130,18 +131,89 @@ private fun Meta(icon: ImageVector, text: String) = Row(verticalAlignment = Alig
 }
 
 @Composable
+fun MyPurchasesPage(s: AppState) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            H1("My Purchases")
+            Sub("Marketplace orders placed by your account, with saved order details and current status.")
+        }
+        PrimaryButton("Browse Marketplace", icon = Icons.Outlined.ShoppingBag) { s.navigate(Page.MARKET) }
+    }
+    val orders = s.visibleOrders
+    if (orders.isEmpty()) {
+        GlassCard(Modifier.fillMaxWidth(), padding = 32.dp) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.ShoppingBag, null, Modifier.size(42.dp), tint = Palette.Muted)
+                Sub("You haven't placed a marketplace order yet.")
+                PrimaryButton("Explore Marketplace") { s.navigate(Page.MARKET) }
+            }
+        }
+    }
+    orders.forEach { order ->
+        GlassCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("#${order.orderNumber}", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                Spacer(Modifier.width(10.dp))
+                StatusPill(order.fulfillmentStatus)
+                Spacer(Modifier.weight(1f))
+                Sub(order.orderDate)
+            }
+            Spacer(Modifier.height(8.dp))
+            order.items.forEach { item ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AsyncImage(
+                        item.productImageUrl.ifBlank { s.images.defaultProductFallbackImage },
+                        Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)),
+                        contentDescription = item.productName,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text("${item.productName} × ${item.qty}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(item.sellerName.ifBlank { "Seller unavailable for this legacy order" }, fontSize = 11.sp, color = Palette.Muted)
+                    }
+                    Text("$PESO${money(item.qty * item.unitPrice)}", fontWeight = FontWeight.Bold)
+                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Palette.Border)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Total · ${order.paymentMethod}", fontWeight = FontWeight.Bold, color = Palette.Forest)
+                    Text("$PESO${money(order.totalAmount)}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                }
+                SecondaryButton("Order Details", icon = Icons.Outlined.Description) { s.selectedOrderForView = order }
+                if (s.canCancelOrder(order)) {
+                    Spacer(Modifier.width(8.dp))
+                    SecondaryButton("Cancel Order", icon = Icons.Outlined.Cancel, color = Palette.Red) {
+                        s.confirm("Cancel order #${order.orderNumber}?", "The items will be returned to stock and the farm will be notified.", "Yes, Cancel Order") {
+                            s.cancelOrder(order.id)
+                        }
+                    }
+                }
+                if (s.canDeletePurchase(order)) {
+                    Spacer(Modifier.width(8.dp))
+                    SecondaryButton("Delete", icon = Icons.Outlined.Delete, color = Palette.Red) {
+                        s.confirm("Delete cancelled order #${order.orderNumber}?", "This permanently removes the cancelled order from your purchase history.", "Yes, Delete") {
+                            s.deletePurchase(order.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun FarmerOrdersPage(s: AppState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Pill("Fulfillment & Packing Desk"); Spacer(Modifier.height(6.dp))
-            H1("Tourist Produce Orders")
-            Sub("Review orders placed by tourists for ${s.myFarmLabel} produce, inspect payment proofs, and manage packing & dispatch.")
+            Pill("Marketplace Order Desk"); Spacer(Modifier.height(6.dp))
+            H1("Marketplace Orders")
+            Sub("Review Cash on Delivery orders for ${s.myFarmLabel} produce and confirm or cancel them.")
         }
         SecondaryButton("Print Packing Slips", icon = Icons.Outlined.Download) {
             Printing.openHtml("packing-slips.html", Printing.orderHtml(s.visibleOrders, "${s.myFarmLabel} · Packing Slips"))
         }
     }
-    val tabs = listOf("All", "Pending Packing", "Packed", "Dispatched", "Out for Delivery", "Delivered")
+    val tabs = listOf("All") + ORDER_STATUSES
     Row(verticalAlignment = Alignment.CenterVertically) {
         FilterChipRow(tabs, s.ordersFilter, { t -> "$t (${if (t == "All") s.visibleOrders.size else s.visibleOrders.count { it.fulfillmentStatus == t }})" }) { s.ordersFilter = it }
         Spacer(Modifier.weight(1f))
@@ -159,7 +231,7 @@ fun FarmerOrdersPage(s: AppState) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Column(Modifier.weight(1f)) {
                     Label("Tourist Customer Details")
-                    Text("👤 ${o.customerName}", fontWeight = FontWeight.Bold); Text("📞 ${o.customerPhone}", fontSize = 12.sp); Text("📍 ${o.customerAddress}", fontSize = 12.sp)
+                    Text(o.customerName, fontWeight = FontWeight.Bold); Text("Phone: ${o.customerPhone}", fontSize = 12.sp); Text("Delivery address: ${o.customerAddress}", fontSize = 12.sp)
                     o.specialDeliveryNotes?.let { Text("Delivery Note: $it", fontSize = 11.sp, color = Color(0xFF92400E)) }
                 }
                 Column(Modifier.weight(1f)) {
@@ -180,25 +252,15 @@ fun FarmerOrdersPage(s: AppState) {
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Label("Update Fulfillment Status:")
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ORDER_STATUSES.forEach { (st, l) ->
-                            if (o.fulfillmentStatus == st) PrimaryButton(l) { s.orderStatusUpdate(o.id, st) } else SecondaryButton(l) { s.orderStatusUpdate(o.id, st) }
-                        }
-                    }
+                    Label("Order Status:")
+                    if (o.fulfillmentStatus == "Pending" && s.canManageOrder(o)) {
+                        PrimaryButton("Confirm Order", icon = Icons.Outlined.CheckCircle) { s.orderStatusUpdate(o.id, "Confirmed") }
+                    } else Sub(if (o.fulfillmentStatus == "Confirmed") "This order is confirmed." else "This order was cancelled.")
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF0FDF4)).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("🚚 Courier: ${listOfNotNull(o.courierName, o.riderName).joinToString(" · ").ifBlank { "Not yet assigned" }}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("📍 ${o.currentLocation ?: "Location not yet reported"}", fontSize = 12.sp)
-                }
-                Column(Modifier.padding(horizontal = 12.dp)) {
-                    Text(if (o.isReceivedByUser) "✓ Received by Tourist (Verified)" else "⏱ Tourist Has Not Yet Received", fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        color = if (o.isReceivedByUser) Color(0xFF166534) else Color(0xFF92400E))
-                    Text(if (o.isReceivedByUser) (o.receivedAt ?: o.orderDate) else (o.estimatedArrival ?: "In Transit · Awaiting Handover"), fontSize = 11.sp)
-                }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Sub("Delivery address: ${o.customerAddress}", Modifier.weight(1f))
                 SecondaryButton("Receipt", icon = Icons.Outlined.Print) { s.printOrderReceipt(o) }
                 Spacer(Modifier.width(6.dp))
                 if (s.canCancelOrder(o)) {
@@ -207,12 +269,6 @@ fun FarmerOrdersPage(s: AppState) {
                     }
                     Spacer(Modifier.width(6.dp))
                 }
-                if (s.isAdmin) {
-                    IconButton({ s.confirm("Delete order #${o.orderNumber}?", "This permanently removes the order record.") { s.deleteOrder(o.id) } }) {
-                        Icon(Icons.Outlined.Delete, "Delete order", tint = Palette.Red)
-                    }
-                }
-                PrimaryButton("Track Delivery", icon = Icons.Outlined.Navigation) { s.selectedOrderForTracking = o }
             }
         }
     }

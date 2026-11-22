@@ -34,7 +34,7 @@ fun FarmerProfilePage(s: AppState) {
         AsyncImage(f.farmBannerUrl.ifBlank { s.images.farmerProfileBanner }, Modifier.fillMaxSize(), contentDescription = f.farmName)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE60B2512)))))
         Row(Modifier.align(Alignment.TopEnd).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (f.certifications.isNotEmpty()) Pill("🛡 ${f.certifications.first()}", Color.White.copy(alpha = 0.92f), Palette.Deep)
+            if (f.certifications.isNotEmpty()) Pill(f.certifications.first(), Color.White.copy(alpha = 0.92f), Palette.Deep)
             SecondaryButton("Change Cover Photo", icon = Icons.Outlined.PhotoCamera) { pickImageFile("Choose farm cover photo")?.let { s.changeFarmBanner(f.id, it) } }
         }
         Row(Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.Bottom) {
@@ -45,7 +45,7 @@ fun FarmerProfilePage(s: AppState) {
                     Text(s.displayName, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White); Spacer(Modifier.width(10.dp))
                     Pill(f.roleTitle, Color(0xFFFEF3C7), Color(0xFF92400E))
                 }
-                Text("📍 ${f.farmName} · ${f.location}", color = Color(0xFFBBF7D0), fontSize = 13.sp)
+                Text("${f.farmName} · ${f.location}", color = Color(0xFFBBF7D0), fontSize = 13.sp)
                 Text(f.storyQuote.ifBlank { "Add a short story so tourists get to know you." }, color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 2)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -60,7 +60,7 @@ fun FarmerProfilePage(s: AppState) {
             listOf("Listed Products", "${s.farmProducts.size} Items", "${s.farmProducts.count { it.stock > 0 }} in stock"),
             listOf("Active Tours", "${s.myTours.size + s.myOrchards.size} Tours", "Agro-trail & Fruit Picking"),
             listOf("Tour Bookings", "${s.visibleBookings.size} Bookings", "$PESO${money(s.activeBookings.sumOf { it.totalAmount })} revenue"),
-        ).zip(listOf(Icons.Outlined.Star, Icons.Outlined.Spa, Icons.Outlined.Explore, Icons.Outlined.EmojiEvents)).forEach { (st, ic) ->
+        ).zip(listOf(Icons.Outlined.Star, Icons.Outlined.Spa, Icons.Outlined.Explore, Icons.Outlined.EventAvailable)).forEach { (st, ic) ->
             GlassCard(Modifier.weight(1f)) {
                 Icon(ic, null, tint = Palette.Forest); Spacer(Modifier.height(6.dp))
                 Label(st[0]); Text(st[1], fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep); Sub(st[2])

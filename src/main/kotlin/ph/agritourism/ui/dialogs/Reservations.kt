@@ -17,8 +17,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ph.agritourism.model.Booking
+import ph.agritourism.model.TourPriceStatus
+import ph.agritourism.model.TourPriceType
+import ph.agritourism.model.bookingTotal
 import ph.agritourism.model.slotTime
 import ph.agritourism.model.Role
+import ph.agritourism.model.NO_BOOKING_SCHEDULE_MESSAGE
 import ph.agritourism.ui.*
 
 @Composable
@@ -30,8 +34,8 @@ internal fun Gallery(images: List<String>) = Row(horizontalArrangement = Arrange
 private fun HeroImage(src: String, tag: String, onClose: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(240.dp)) {
         AsyncImage(src, Modifier.fillMaxSize())
-        IconButton(onClose, Modifier.align(Alignment.TopEnd).padding(10.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.9f))) { Icon(Icons.Filled.Close, "Close") }
-        Pill("📍 $tag", Color.White.copy(alpha = 0.92f), Palette.Deep, Modifier.align(Alignment.BottomStart).padding(14.dp))
+        TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep, onClick = onClose)
+        Pill(tag, Color.White.copy(alpha = 0.92f), Palette.Deep, Modifier.align(Alignment.BottomStart).padding(14.dp))
     }
 }
 
@@ -47,15 +51,30 @@ private fun TotalBox(left: String, payment: String, total: Int) {
 internal fun TourModal(s: AppState) {
     val t = s.selectedTour
     val close = { s.isTourModalOpen = false }
+    val total = t.bookingTotal(1)
+    val priceDescription = when (t.priceType) {
+        TourPriceType.PER_PERSON -> "$PESO${t.pricePerPerson} per person"
+        TourPriceType.PER_GROUP -> "$PESO${t.pricePerPerson} per group"
+        TourPriceType.PER_PACKAGE -> "$PESO${t.pricePerPerson} per package"
+    }
     Modal(close, 760.dp) {
         HeroImage(t.imageUrl, t.location, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(t.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
-                    Row(verticalAlignment = Alignment.CenterVertically) { Sub("📍 ${t.location} • "); RatingText(t.rating, t.reviewsCount); Sub(" • "); Pill(t.highlightTag) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Sub("${t.location} • ")
+                        if (t.reviewsCount > 0) RatingText(t.rating, t.reviewsCount) else Sub("New listing")
+                        Sub(" • "); Pill(t.highlightTag)
+                    }
                 }
-                Text("$PESO${t.pricePerPerson}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest); Text(" /person", color = Palette.Muted)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("$PESO${t.pricePerPerson}", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
+                    Text(t.priceType.label, fontSize = 11.sp, color = Palette.Muted)
+                    Pill(t.priceStatus.label, if (t.priceStatus == TourPriceStatus.ESTIMATED) Color(0xFFFFF3D1) else Palette.Mint,
+                        if (t.priceStatus == TourPriceStatus.ESTIMATED) Color(0xFF92400E) else Palette.Forest)
+                }
             }
             Text(t.description, fontSize = 13.sp, color = Color(0xFF334155))
             if (s.canEditTour(t)) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,31 +82,41 @@ internal fun TourModal(s: AppState) {
                 SecondaryButton("Delete Tour", icon = Icons.Outlined.Delete, color = Palette.Red) { s.askDeleteTour(t) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                InfoTile("Operating Hours", t.operatingHours, Icons.Outlined.Schedule, Modifier.weight(1f))
-                InfoTile("Amenities", t.amenities.joinToString(), Icons.Outlined.VerifiedUser, Modifier.weight(1f))
+                InfoTile("Operating Hours", t.operatingHours.ifBlank { "Pending admin configuration" }, Icons.Outlined.Schedule, Modifier.weight(1f))
+                InfoTile("Amenities", t.amenities.joinToString().ifBlank { "Not confirmed" }, Icons.Outlined.VerifiedUser, Modifier.weight(1f))
                 InfoTile("Activities", t.activities.joinToString(), Icons.Outlined.AutoAwesome, Modifier.weight(1f))
             }
+            if (t.estimatedDuration.isNotBlank()) InfoTile("Estimated Duration", t.estimatedDuration, Icons.Outlined.Schedule)
             Row { Label("Tour Gallery Photo Highlights"); Spacer(Modifier.weight(1f)); Label("${t.thumbnails.size} Photos") }
             Gallery(t.thumbnails)
             Label("Tourist Reviews (${s.reviewsFor("tour", t.id).size})")
             ReviewList(s.reviewsFor("tour", t.id).take(5), "No reviews for this tour yet.")
             HorizontalDivider(color = Palette.Border)
-            Text("📅 Customize Your Tour Booking", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                DateField("Tour Schedule Date", s.tourDate, { s.tourDate = it }, Modifier.weight(1f))
-                val slots = s.slotsFor("tour", t.id)
-                LaunchedEffect(t.id, slots) { if (s.tourTime !in slots) s.tourTime = slots.firstOrNull().orEmpty() }
-                Dropdown("Select Time Slot", slots, s.tourTime, { it.ifBlank { "No time slots available" } }, Modifier.weight(1f)) { s.tourTime = it }
+            if (!t.bookingEnabled) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFFBEB)).padding(14.dp)) {
+                    Text("Bookings are currently unavailable for this tour.", fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                    Text("Listed price: $PESO${money(t.pricePerPerson)} ${t.priceType.label} · ${t.priceStatus.label}", fontSize = 12.sp)
+                    if (t.priceSuggestionBasis.isNotBlank()) Sub(t.priceSuggestionBasis)
+                    if (t.priceSuggestionSource.isNotBlank()) Text("Source: ${t.priceSuggestionSource}", fontSize = 11.sp, color = Palette.Forest)
+                    Sub("The farm must have a valid tour schedule before an administrator can enable bookings.")
+                }
+            } else {
+                Text("Customize Your Tour Booking", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DateField("Tour Schedule Date", s.tourDate, { s.tourDate = it }, Modifier.weight(1f))
+                    val slots = s.availableSlotsFor("tour", t.id)
+                    LaunchedEffect(t.id, slots) { if (s.tourTime !in slots) s.tourTime = slots.firstOrNull().orEmpty() }
+                    Column(Modifier.weight(1f)) {
+                        Dropdown("Select Time Slot", slots, s.tourTime, { it.ifBlank { "No time slots available" } }) { s.tourTime = it }
+                        if (slots.isEmpty()) Sub(NO_BOOKING_SCHEDULE_MESSAGE)
+                    }
+                }
+                Label("Select Tour Payment Method")
+                ChoiceRow(TOUR_PAYMENT_METHODS, s.tourPaymentMethod) { s.tourPaymentMethod = it }
+                TotalBox(priceDescription, "Payment via ${s.tourPaymentMethod}", total)
+                PrimaryButton("Confirm", Modifier.fillMaxWidth(), Icons.Outlined.EventAvailable,
+                    enabled = isValidDate(s.tourDate) && s.tourTime in s.availableSlotsFor("tour", t.id)) { s.bookSelectedTour() }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Label("Number of Persons / Guests"); Sub("Family and group passes automatically adjusted") }
-                Stepper(s.tourGuests, "Pax") { s.tourGuests = it }
-            }
-            Label("Select Tour Payment Method")
-            ChoiceRow(listOf("GCash", "Maya", "Bank Transfer", "Pay at Farm"), s.tourPaymentMethod) { s.tourPaymentMethod = it }
-            TotalBox("$PESO${t.pricePerPerson} × ${s.tourGuests} ${if (s.tourGuests == 1) "person" else "persons"}", "Payment via ${s.tourPaymentMethod}", t.pricePerPerson * s.tourGuests)
-            PrimaryButton("Confirm Tour Booking & Pay · $PESO${money(t.pricePerPerson * s.tourGuests)}", Modifier.fillMaxWidth(), Icons.Outlined.EventAvailable,
-                enabled = isValidDate(s.tourDate)) { s.bookSelectedTour() }
         }
     }
 }
@@ -109,7 +138,7 @@ internal fun FruitModal(s: AppState) {
             Row { Label("Fruit Picking Gallery Photos"); Spacer(Modifier.weight(1f)); Label("${f.thumbnails.size} Photos") }
             Gallery(f.thumbnails)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("✅ Includes harvest basket and dedicated farm guide", fontSize = 13.sp)
+                Text("Includes harvest basket and dedicated farm guide", fontSize = 13.sp)
                 Text("✓ Duration: ${f.duration}", fontSize = 13.sp)
                 Text("✓ Available seasonal fruits: ${f.seasonalFruits}", fontSize = 13.sp)
             }
@@ -118,19 +147,22 @@ internal fun FruitModal(s: AppState) {
             HorizontalDivider(color = Palette.Border)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 DateField("Select Date", s.fruitDate, { s.fruitDate = it }, Modifier.weight(1f))
-                val slots = s.slotsFor("orchard", f.id)
+                val slots = s.availableSlotsFor("orchard", f.id)
                 LaunchedEffect(f.id, slots) { if (s.fruitTime !in slots) s.fruitTime = slots.firstOrNull().orEmpty() }
-                Dropdown("Select Time Slot", slots, s.fruitTime, { it.ifBlank { "No time slots available" } }, Modifier.weight(1f)) { s.fruitTime = it }
+                Column(Modifier.weight(1f)) {
+                    Dropdown("Select Time Slot", slots, s.fruitTime, { it.ifBlank { "No time slots available" } }) { s.fruitTime = it }
+                    if (slots.isEmpty()) Sub(NO_BOOKING_SCHEDULE_MESSAGE)
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Label("Number of Fruit Pickers"); Sub("Includes individual harvesting basket") }
                 Stepper(s.fruitGuests, "Pax") { s.fruitGuests = it }
             }
             Label("Select Fruit Picking Payment Method")
-            ChoiceRow(listOf("GCash", "Maya", "Bank Transfer", "Pay at Farm"), s.fruitPaymentMethod) { s.fruitPaymentMethod = it }
+            ChoiceRow(TOUR_PAYMENT_METHODS, s.fruitPaymentMethod) { s.fruitPaymentMethod = it }
             TotalBox("$PESO${f.pricePerPerson} × ${s.fruitGuests} ${if (s.fruitGuests == 1) "picker" else "pickers"}", "Payment via ${s.fruitPaymentMethod}", f.pricePerPerson * s.fruitGuests)
-            PrimaryButton("Confirm Fruit Picking Booking · $PESO${money(f.pricePerPerson * s.fruitGuests)}", Modifier.fillMaxWidth(), Icons.Outlined.AutoAwesome,
-                enabled = isValidDate(s.fruitDate)) { s.bookSelectedFruit() }
+            PrimaryButton("Confirm", Modifier.fillMaxWidth(), Icons.Outlined.AutoAwesome,
+                enabled = isValidDate(s.fruitDate) && s.fruitTime in s.availableSlotsFor("orchard", f.id)) { s.bookSelectedFruit() }
         }
     }
 }
@@ -158,7 +190,7 @@ internal fun BookingDossier(s: AppState, b0: Booking) {
                 InfoTile("Tourist / Guest", b.customerName, Icons.Outlined.Person, Modifier.weight(1f))
                 InfoTile("Group Size", "${b.participants} Persons", Icons.Outlined.Groups, Modifier.weight(1f))
             }
-            InfoTile("Tourist Contact Information", "📞 ${b.customerPhone ?: "not provided"}   ✉ ${b.customerEmail ?: "walk-in guest"}", modifier = Modifier.fillMaxWidth())
+            InfoTile("Tourist Contact Information", "Phone: ${b.customerPhone ?: "not provided"} · Email: ${b.customerEmail ?: "walk-in guest"}", modifier = Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFFBEB)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) { Label("1-Day Attendance Confirmation"); Text(b.attendanceStatus ?: "Pending Confirmation", fontWeight = FontWeight.Bold) }
                 if (b.attendanceStatus == "Pending Confirmation" && s.ownsBooking(b)) {
@@ -166,7 +198,7 @@ internal fun BookingDossier(s: AppState, b0: Booking) {
                     SecondaryButton("No", color = Palette.Red) { s.attendanceConfirmation(b.id, false) }
                 }
             }
-            Row { Text("📄 Tourist Uploaded Documents & Dossier", fontWeight = FontWeight.ExtraBold, color = Palette.Deep); Spacer(Modifier.weight(1f)); Pill(if (b.uploadedIdDoc != null) "ID on file" else "No ID on file") }
+            Row { Text("Tourist Uploaded Documents & Dossier", fontWeight = FontWeight.ExtraBold, color = Palette.Deep); Spacer(Modifier.weight(1f)); Pill(if (b.uploadedIdDoc != null) "ID on file" else "No ID on file") }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 InfoTile("Uploaded Valid ID", b.uploadedIdDoc ?: "Not uploaded", Icons.Outlined.VerifiedUser, Modifier.weight(1f))
                 InfoTile("Payment", b.uploadedReceiptDoc ?: b.paymentMethod ?: "Payment method not set", Icons.Outlined.CreditCard, Modifier.weight(1f))
@@ -193,7 +225,7 @@ internal fun BookingDossier(s: AppState, b0: Booking) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("Save / Print Ticket", icon = Icons.Outlined.Download) { Printing.openHtml("voucher-${b.bookingCode}.html", Printing.bookingDossierHtml(b)) }
-                SecondaryButton("Close") { close() }
+                TextAction("Close") { close() }
             }
         }
     }
@@ -212,77 +244,56 @@ private fun QrGlyph() {
 @Composable
 internal fun OrderDossier(s: AppState, id: String) {
     val o = s.farmerOrders.firstOrNull { it.id == id } ?: return
+    if (!s.canViewOrder(o)) return
     val close = { s.selectedOrderForView = null }
+    var address by remember(o.id, o.customerAddress) { mutableStateOf(o.customerAddress) }
     Modal(close, 680.dp) {
         ModalHeader("Produce Order Dossier #${o.orderNumber}", "Tourist Order & Payment", Icons.Outlined.Inventory2, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) { Label("Customer"); Text(o.customerName, fontWeight = FontWeight.ExtraBold); Sub(o.customerPhone); Sub(o.customerAddress) }
+                Column(Modifier.weight(1f)) {
+                    Label("Customer")
+                    Text(o.customerName, fontWeight = FontWeight.ExtraBold)
+                    Sub(o.customerPhone)
+                    if (!s.isTourist || !s.canUpdateOrderAddress(o)) Sub(o.customerAddress)
+                }
                 Column(horizontalAlignment = Alignment.End) { Label("Fulfillment Status"); StatusPill(o.fulfillmentStatus); Text("$PESO${money(o.totalAmount)}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest) }
+            }
+            if (s.canUpdateOrderAddress(o)) {
+                Field("Delivery Address", address, { address = it }, singleLine = false, minLines = 2, maxLength = 300)
             }
             o.specialDeliveryNotes?.let { Text("Delivery Note: $it", fontSize = 12.sp, color = Color(0xFF92400E)) }
             Label("Ordered Items:")
             o.items.forEach { Row { Text("${it.productName} × ${it.qty}", Modifier.weight(1f), fontSize = 13.sp); Text("$PESO${money(it.qty * it.unitPrice)}", fontWeight = FontWeight.Bold) } }
             Row { Label("Payment"); Spacer(Modifier.weight(1f)); Pill(o.paymentStatus, Color(0xFFDCFCE7), Color(0xFF166534)) }
-            Label("Update Order Status:")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ORDER_STATUSES.forEach { (st, l) ->
-                    if (o.fulfillmentStatus == st) PrimaryButton(l) { s.orderStatusUpdate(o.id, st) } else SecondaryButton(l) { s.orderStatusUpdate(o.id, st) }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton("Print Order Dossier", icon = Icons.Outlined.Print) { Printing.openHtml("order-${o.orderNumber}.html", Printing.orderHtml(listOf(o), "Produce Order Dossier #${o.orderNumber}")) }
-                SecondaryButton("Close") { close() }
-            }
-        }
-    }
-}
-
-@Composable
-internal fun TrackingInspector(s: AppState, id: String) {
-    val o = s.farmerOrders.firstOrNull { it.id == id } ?: return
-    val close = { s.selectedOrderForTracking = null }
-    Modal(close, 680.dp) {
-        ModalHeader("Logistics & Route Inspection #${o.orderNumber}", "Farmer Courier Tracking & Handover", Icons.Outlined.LocalShipping, close)
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                InfoTile("Courier Carrier & Rider", listOfNotNull(o.riderName, o.courierName, o.riderVehicle).joinToString("\n").ifBlank { "Courier not yet assigned" }, modifier = Modifier.weight(1f))
-                InfoTile("Tourist Recipient", "${o.customerName}\n${o.customerPhone}\n${o.trackingNumber ?: ""}", modifier = Modifier.weight(1f))
-            }
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFEFF6FF)).padding(14.dp)) {
-                Label("Live Courier Location:"); Text("🧭 ${o.currentLocation ?: "Location not yet reported"}", fontWeight = FontWeight.Bold)
-                Text("Estimated Arrival: ${o.estimatedArrival ?: "Not yet estimated"}", fontSize = 12.sp)
-            }
-            if (o.isReceivedByUser) {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFDCFCE7)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Package Successfully Handed Over & Received", fontWeight = FontWeight.ExtraBold, color = Color(0xFF166534))
-                        Text("Verified by ${o.receivedByRecipient ?: o.customerName} on ${o.receivedAt ?: o.orderDate}", fontSize = 12.sp)
+            if (s.isTourist) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (s.canUpdateOrderAddress(o)) {
+                        PrimaryButton("Update Address", enabled = address.trim().length in 5..300) { s.updateOrderAddress(o.id, address) }
                     }
-                    Pill("Confirmed", Palette.Forest, Color.White)
+                    if (s.canCancelOrder(o)) {
+                        SecondaryButton("Cancel Order", color = Palette.Red) {
+                            s.confirm("Cancel order #${o.orderNumber}?", "The items will be returned to stock and the farm will be notified.", "Confirm") {
+                                s.cancelOrder(o.id)
+                            }
+                        }
+                    }
+                    TextAction("Close") { close() }
                 }
             } else {
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFFBEB)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Tourist Has Not Yet Confirmed Receipt", fontWeight = FontWeight.ExtraBold)
-                        Text("Package is en route. Tourist will inspect and verify upon rider arrival.", fontSize = 12.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (o.fulfillmentStatus == "Pending" && s.canActOnOrder(o)) {
+                        PrimaryButton("Confirm", icon = Icons.Outlined.CheckCircle) { s.orderStatusUpdate(o.id, "Confirmed") }
                     }
-                    PrimaryButton("Mark as Received by Tourist") { s.confirmOrderReceived(o.id) }
+                    if (s.canCancelOrder(o)) {
+                        SecondaryButton("Cancel Order", icon = Icons.Outlined.Cancel, color = Palette.Red) { s.cancelOrder(o.id) }
+                    }
+                    if (s.canActOnOrder(o)) {
+                        PrimaryButton("Print Order Details") { Printing.openHtml("order-${o.orderNumber}.html", Printing.orderHtml(listOf(o), "Produce Order Details #${o.orderNumber}")) }
+                    }
+                    TextAction("Close") { close() }
                 }
             }
-            Label("Delivery Route Steps:")
-            o.deliverySteps.forEachIndexed { i, st ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (st.completed) "✓" else "${i + 1}", Modifier.width(24.dp), fontWeight = FontWeight.Bold, color = if (st.completed) Palette.Forest else Palette.Muted)
-                    Text(st.title, Modifier.weight(1f), fontSize = 13.sp); Text(st.timestamp, fontSize = 11.sp, color = Palette.Muted)
-                }
-            }
-            Label("Advance Courier Position / Location:")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecondaryButton("SLEX Corridor (In Transit)") { s.updateDeliveryLocation(o.id, "SLEX Alabang Corridor · En route north", "Dispatched") }
-                SecondaryButton("Nearby Destination (1 km)") { s.updateDeliveryLocation(o.id, "Approaching Destination: Within 1 km radius", "Out for Delivery") }
-            }
-            PrimaryButton("Close Tracking Inspector", Modifier.fillMaxWidth()) { close() }
         }
     }
 }
@@ -291,7 +302,7 @@ internal fun TrackingInspector(s: AppState, id: String) {
 internal fun EditBookingModal(s: AppState, e: Booking) {
     val close = { s.editingBooking = null }
     Modal(close, 520.dp) {
-        ModalHeader("Reschedule Tour & Guests", "Update Reservation #${e.bookingCode}", Icons.Outlined.Edit, close)
+        ModalHeader("Reschedule Tour", "Update Reservation #${e.bookingCode}", Icons.Outlined.Edit, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Field("Farm Destination", e.farmName, {}, enabled = false)
             // Seeded bookings use "Nov 20, 2026" display dates; editing normalises them to ISO.
@@ -301,16 +312,7 @@ internal fun EditBookingModal(s: AppState, e: Booking) {
             val slots = s.slotsFor(e)
             val cur = slots.firstOrNull { slotTime(it) == slotTime(e.tourTime) } ?: e.tourTime
             Dropdown("Time Slot", (listOf(cur) + slots).distinct(), cur, { it }) { s.editingBooking = e.copy(tourTime = it) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Label("Number of Guests")
-                    Stepper(e.participants, "Guests") { n ->
-                        val per = e.totalAmount.toDouble() / e.participants
-                        s.editingBooking = e.copy(participants = n, totalAmount = Math.round(per * n).toInt())
-                    }
-                }
-                Text("Total: $PESO${money(e.totalAmount)}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
-            }
+            Text("Total: $PESO${money(e.totalAmount)}", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("Save Updated Schedule", Modifier.weight(1f), enabled = isValidDate(dateValue)) {
                     s.editingBooking = e.copy(tourDate = dateValue)

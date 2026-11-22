@@ -436,6 +436,203 @@
     "res:images/photo-1540420773420-3366772f4999-w400.jpg",
     "res:images/photo-1598170845058-32b9d6a5da37-w600.jpg"
    ]
+  },
+  {
+   "id": 7,
+   "name": "Bantug Lake Ranch",
+   "location": "Granada Alangilan Road, Bacolod City, Negros Occidental, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 350,
+   "operatingHours": "",
+   "amenities": ["Swimming pool", "Picnic facilities"],
+   "activities": ["Boating", "Fishing", "Swimming", "Horseback riding", "Vegetable picking", "Animal feeding"],
+   "imageUrl": "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/6aedcff040067ced2ee1b92b9924c586.jpg",
+   "description": "A lakeside ranch destination shown in the uploaded photos, with boats, landscaped grounds and picnic areas. The current official site lists boating, fishing, swimming, horseback riding, vegetable picking and animal feeding; confirm the exact location and which activities belong in this booking package before publishing.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/574b33d62d2b82869da373a707a6e89f.jpg",
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/82e2ff7e820bdeae1f558ca652cfadc6.jpg",
+    "res:images/Tour/bantug lake ranch-20261120T183300Z-1-001/bantug lake ranch/912d5117dec95b11151d2467dd97a7f0.jpg"
+   ],
+   "estimatedDuration": "Approx. 3 hours; confirm with the operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 350,
+   "priceSuggestionBasis": "ESTIMATE: the official site lists regular adult entry at PHP 75, entry plus swimming at PHP 150, and an All Access Pass at PHP 350 (entry, swimming, two horseback-riding rounds, fishing and boating), updated July 1, 2026. The app's PHP 350/person estimate references that pass but is not a verified AgriTourism tour rate; confirm package inclusions with the operator.",
+   "priceSuggestionSource": "https://bantuglakeranch.com/experiences/"
+  },
+  {
+   "id": 8,
+   "name": "Burnham Park",
+   "location": "Baguio City, Benguet, Cordillera Administrative Region, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 250,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Lakeside walk", "Park and garden viewing", "Boating (rental terms to confirm)"],
+   "imageUrl": "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/ba096562292ad3c4c1894012689183e0.jpg",
+   "description": "A scenic visit to Baguio's central urban park, with tree-lined paths and a man-made lake. The uploaded photos show the gardens and boats; this draft describes a park visit rather than a verified farm tour, and any boat hire or hosted itinerary must be confirmed before bookings open.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/7c21ac38b58ba2f388a7bdadf5e0f761.jpg",
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/d1380b6d4d7037a5a7641ee9b9207f2e.jpg",
+    "res:images/Tour/Burnham -20261120T183303Z-1-001/Burnham/e542515a25b0e60fe35997cffa4e304c.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm the visit scope",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 250,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 250/person for a short hosted park walk. No official guided-tour rate was verified; boat hire, other rides, food and transport are excluded unless separately confirmed. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 9,
+   "name": "Chocolate Hills",
+   "location": "Carmen, Bohol, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 300,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Viewpoint visit", "Landscape walk", "Photography"],
+   "imageUrl": "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/a9f6d1c2b6f5650af74ec97b6d34c18b.jpg",
+   "description": "A destination draft for viewing Bohol's distinctive rounded hills from the visitor complex. Uploaded images show the hill landscape, stairs and viewing paths; confirm the specific site, current access rules and any additional activities before enabling reservations.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/7011f03f4bce1fd094c72637c8727254.jpg",
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/94c31c0772c8304fe6bc3a4a9e1cd59f.jpg",
+    "res:images/Tour/chocolate hills-20261120T183306Z-1-001/chocolate hills/d9204591220a6fcb27780b095df8d141.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the site operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 300,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 300/person for a basic viewpoint visit and orientation. No official published package rate was verified; entrance, transport and optional activities must be checked. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 10,
+   "name": "Garin Farm",
+   "location": "San Joaquin, Iloilo, Western Visayas, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 350,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Farm and garden walk", "Scenic viewpoint visit", "Photography"],
+   "imageUrl": "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/0b00a0b6ba52e129b9d167133a393972.jpg",
+   "description": "A farm destination draft based on the uploaded landscaped grounds, garden paths and elevated viewpoints. The photos also include a religious-themed attraction; confirm which areas and activities are included in a visitor itinerary with the operator before accepting bookings.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/4e621e965a4fbc750f8aa5bc4cb3ee11.jpg",
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/50b77d0433e990db8b59f4035740d322 (1).jpg",
+    "res:images/Tour/garin farm-20261120T183308Z-1-001/garin farm/a6014441fe003dbb178827517d9bdbe7.jpg"
+   ],
+   "estimatedDuration": "Approx. 3 hours; confirm with the operator",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 350,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 350/person for a half-day farm-and-viewpoint visit. No official current rate or package inclusions were verified; confirm entrance, activities and separate fees with the operator. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 11,
+   "name": "Northern Blossom Flower Farm",
+   "location": "Atok, Benguet, Cordillera Administrative Region, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 250,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Seasonal flower viewing", "Garden walk", "Photography"],
+   "imageUrl": "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/25bb8e95aabc441adeaf1b4ab454b0e1.jpg",
+   "description": "A highland flower-farm draft featuring the terraced beds, colorful blooms and mountain scenery visible in the uploaded photographs. Flower availability is seasonal; confirm the current bloom calendar, visitor route and access rules with the farm before publishing a schedule.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/3a5aad9f3e179d77cc623b12c4afe90d.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/3cab1b78d059297fc794caed0242e3ac.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/a79be2173c9dba1941e9c32b55fa5ff2.jpg",
+    "res:images/Tour/northern blossom -20261120T183318Z-1-001/northern blossom/d5f0be7cf36cfd1ca5458e1ff97cff22.jpg"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the farm",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 250,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 250/person for a garden visit and photography stop. No current official rate was verified; seasonal access and inclusions require confirmation. Admin can edit the estimate.",
+   "priceSuggestionSource": ""
+  },
+  {
+   "id": 12,
+   "name": "Sagada Hanging Coffins",
+   "location": "Echo Valley, Sagada, Mountain Province, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 300,
+   "operatingHours": "",
+   "amenities": [],
+   "activities": ["Guided cultural walk", "Hanging-coffin site visit", "Photography subject to local protocols"],
+   "imageUrl": "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/cea622deb4e09fb41af9c3a4ba7ebe09.jpg",
+   "description": "A respectful cultural-site draft for the hanging-coffin landscape shown in the uploaded photos. Visitors should follow local community guidance and use an accredited local guide where required; confirm the route, current access rules and cultural protocols before scheduling.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/2060ab5b46b575e4742a3b4bf47ed9d8.jpg",
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/22346906fc0cce247ee00c343fd79309.jpg",
+    "res:images/Tour/sagada hanging coffins-20261120T183517Z-1-001/sagada hanging coffins/a6f07bb65bbe88f8f40156af1ed87019.jpg"
+   ],
+   "estimatedDuration": "Approx. 2-3 hours; confirm with the accredited guide",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 300,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 300/person for an assisted cultural walk. The official Tourism Office lists a separate PHP 100/person registration fee, but no current hanging-coffins guide/package rate was verified. Confirm the guide quote, registration handling and inclusions.",
+   "priceSuggestionSource": "https://tourism.sagada.gov.ph/"
+  },
+  {
+   "id": 13,
+   "name": "SVD Laudato Si' Farm",
+   "location": "Arnoldus Road, Barangay Maitim 2nd East, Tagaytay City, Cavite, Philippines",
+   "rating": 0.0,
+   "reviewsCount": 0,
+   "pricePerPerson": 200,
+   "operatingHours": "",
+   "amenities": ["Ecospirituality Center", "Chapel of the Virgin of the Poor", "Farm-to-table dining"],
+   "activities": ["Farm tour", "Vegetable garden visit", "Prayer and reflection"],
+   "imageUrl": "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/IMG_204aa98f-8547-4d21-a971-869ab6af068d.webp",
+   "description": "An ecotourism farm in Tagaytay focused on faith, farming and food. Its official visitor information confirms farm tours, vegetable-growing areas, an ecospirituality center, a chapel and farm-to-table dining. The farm says entry is free; confirm the tour itinerary and reservations with the host.",
+   "highlightTag": "Estimated Rate",
+   "farmerName": "Host unassigned",
+   "thumbnails": [
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/792ad72a045fe2210e1364afcdf70a8d.jpg",
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/d2a56ade63dab760fa80a46540e5e2aa.jpg",
+    "res:images/Tour/SVD laudato si' farm tagaytay city-20261120T183523Z-1-001/SVD laudato si_ farm tagaytay city/IMG_8e086f7c-d217-4c01-8f4e-4b566f739059.webp"
+   ],
+   "estimatedDuration": "Approx. 2 hours; confirm with the host",
+   "priceApproved": true,
+   "priceStatus": "ESTIMATED",
+   "priceType": "PER_PERSON",
+   "bookingEnabled": false,
+   "suggestedPricePerPerson": 200,
+   "priceSuggestionBasis": "ESTIMATE ONLY: PHP 200/person is a suggested farm-tour service price, not an admission fee. The official foundation page says entry is free, farm tours are offered, walk-ins are accepted, and groups of 10+ should reserve a week ahead. It lists Mon-Fri 7:00 AM-7:00 PM and Sat-Sun 7:00 AM-8:00 PM, but the current search listing shows different hours. Verify the current weekly schedule and tour charge with the farm before enabling bookings. Contact: 0905-106-5499 or contact@svdlaudatosifarmfoundation.org. Admin can edit the estimate.",
+   "priceSuggestionSource": "https://www.svdlaudatosifarmfoundation.org/2023/07/what-you-need-to-know-about-ussvd-farm.html"
   }
  ],
  "fruitPicking": [
@@ -799,13 +996,13 @@
    "tourTime": "08:30 AM - Morning Agro-Walk",
    "participants": 2,
    "totalAmount": 500,
-   "paymentMethod": "GCash",
+   "paymentMethod": "Pay at the Farm",
    "status": "Confirmed",
    "attendanceStatus": "Pending Confirmation",
    "assignedGuide": "Ate Rosa (Master Beekeeper)",
    "specialRequests": "Vegetarian harvest snacks requested. 1 senior citizen in group; needs golf cart trail assist.",
    "uploadedIdDoc": "Philippine National ID · Verified Eco-Tourist",
-   "uploadedReceiptDoc": "GCash Ref #9821-441-0023 · ₱500.00 Paid"
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
   },
   {
    "id": 102,
@@ -820,13 +1017,13 @@
    "tourTime": "10:30 AM - Canopy Orchard Harvest",
    "participants": 2,
    "totalAmount": 400,
-   "paymentMethod": "GCash",
+   "paymentMethod": "Pay at the Farm",
    "status": "Pending",
    "attendanceStatus": "Pending Confirmation",
    "assignedGuide": "Kuya Dennis (Senior Pomologist)",
    "specialRequests": "First-time visitor. Needs 2 harvesting baskets and tree clippers.",
    "uploadedIdDoc": "Passport / Tourist Visa Verified",
-   "uploadedReceiptDoc": "GCash Ref #9821-441-0089 · ₱400.00 Paid"
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
   },
   {
    "id": 103,
@@ -841,13 +1038,13 @@
    "tourTime": "02:00 PM - Afternoon Farm Experience",
    "participants": 2,
    "totalAmount": 560,
-   "paymentMethod": "Bank Transfer",
+   "paymentMethod": "Pay at the Farm",
    "status": "Confirmed",
    "attendanceStatus": "Confirmed Attending",
    "assignedGuide": "Mang Rigor (Heritage Agro Guide)",
    "specialRequests": "Interested in purchasing 5 blocks of artisanal tablea after the workshop.",
    "uploadedIdDoc": "Driver's License (Verified)",
-   "uploadedReceiptDoc": "BPI Online Ref #BPI-889102 · ₱560.00 Paid"
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
   },
   {
    "id": 104,
@@ -862,13 +1059,13 @@
    "tourTime": "09:00 AM - Morning Agro-Walk",
    "participants": 4,
    "totalAmount": 800,
-   "paymentMethod": "Pay at Farm",
+   "paymentMethod": "Pay at the Farm",
    "status": "Pending",
    "attendanceStatus": "Pending Confirmation",
    "assignedGuide": "Kuya Elmer (Trail Captain)",
    "specialRequests": "Family group with 2 kids; requests animal feeding basket.",
    "uploadedIdDoc": "Company ID Verified",
-   "uploadedReceiptDoc": "On-site Cash Check-in Arranged"
+   "uploadedReceiptDoc": "Payment to be settled at the farm"
   }
  ],
  "orders": [
@@ -891,9 +1088,9 @@
     }
    ],
    "totalAmount": 490,
-   "paymentMethod": "GCash",
-   "paymentStatus": "Paid via GCash",
-   "fulfillmentStatus": "Dispatched",
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "COD",
+   "fulfillmentStatus": "Confirmed",
    "orderDate": "Nov 19, 2026 · 10:15 AM",
    "uploadedReceiptUrl": "",
    "specialDeliveryNotes": "Please deliver fresh ripe mangoes with bubble padding.",
@@ -958,9 +1155,9 @@
     }
    ],
    "totalAmount": 495,
-   "paymentMethod": "GCash",
-   "paymentStatus": "Paid via GCash",
-   "fulfillmentStatus": "Dispatched",
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "COD",
+   "fulfillmentStatus": "Confirmed",
    "orderDate": "Nov 19, 2026 · 08:30 AM",
    "uploadedReceiptUrl": "",
    "specialDeliveryNotes": "Call upon arrival at subdivision security guard house.",
@@ -1024,9 +1221,9 @@
     }
    ],
    "totalAmount": 670,
-   "paymentMethod": "GCash",
-   "paymentStatus": "Paid via GCash",
-   "fulfillmentStatus": "Delivered",
+   "paymentMethod": "Cash on Delivery",
+   "paymentStatus": "Paid on Delivery",
+   "fulfillmentStatus": "Confirmed",
    "orderDate": "Nov 18, 2026 · 02:40 PM",
    "uploadedReceiptUrl": "",
    "specialDeliveryNotes": "Leave with security reception if recipient is not available.",
@@ -1127,16 +1324,6 @@
    "attendanceStatus": "Pending Confirmation"
   },
   {
-   "id": 1,
-   "title": "Tour Booking Confirmed",
-   "desc": "Your booking for Sunflower Sanctuary on Nov 20 is confirmed!",
-   "fullDetail": "Your reservation for 2 guests at Golden Sunflower & Honeycomb Sanctuary has been confirmed by farmer Mang Juan. Guide assigned. Reference: #BK-2026-881",
-   "time": "10 mins ago",
-   "read": false,
-   "type": "booking",
-   "targetRole": "tourist"
-  },
-  {
    "id": 2,
    "title": "New Harvest Deal 10% OFF",
    "desc": "10% OFF on all fresh organic vegetables from Batangas orchards.",
@@ -1153,14 +1340,14 @@
    "fullDetail": "Mang Juan Dela Cruz reviewed and approved tour booking #BK-2026-882 for Sunnyvale Farm Heritage Agro-Trail. The farm is ready to welcome your group.",
    "time": "3 hours ago",
    "read": true,
-   "type": "booking",
+   "type": "booking_update",
    "targetRole": "tourist"
   },
   {
    "id": 10,
    "title": "New Tourist Tour Booking: James Smith",
    "desc": "James Smith booked Valencia Orange Fruit Picking for 2 guests.",
-   "fullDetail": "New tourist reservation received for 2 guests on Nov 21, 2026 at 10:30 AM. Total payment: ₱400 paid via GCash. Customer contact: +63 920 111 2233. Tourist uploaded valid ID and special requests for orange crates.",
+   "fullDetail": "New tourist reservation received for 2 guests on Nov 21, 2026 at 10:30 AM. Payment: cash on arrival. Customer contact: +63 920 111 2233. Tourist uploaded valid ID and special requests for orange crates.",
    "time": "20 mins ago",
    "read": false,
    "type": "farmer_booking_alert",
@@ -1170,7 +1357,7 @@
    "id": 11,
    "title": "New Tourist Produce Order #ORD-2026-441",
    "desc": "Maria Santos ordered 2kg Carabao Mangoes & Pure Wild Honey.",
-   "fullDetail": "Tourist Maria Santos placed order #ORD-2026-441: 2kg Carabao Mangoes and 1 bottle Pure Wild Honey. Delivery address: Unit 12B Green Residences, Taft Ave, Malate, Manila. Payment verified via GCash with receipt uploaded. Ready for harvest packing.",
+   "fullDetail": "Tourist Maria Santos placed order #ORD-2026-441: 2kg Carabao Mangoes and 1 bottle Pure Wild Honey. Delivery address: Unit 12B Green Residences, Taft Ave, Malate, Manila. Payment method: cash on delivery. Ready for harvest packing.",
    "time": "40 mins ago",
    "read": false,
    "type": "farmer_order",
@@ -1196,7 +1383,6 @@
   "mariaAvatar": "res:farmers/Anabelle.png",
   "juanAvatar": "res:farmers/Juan.png",
   "adminAvatar": "res:farmers/Pedro.png",
-  "gcashQrMockup": "res:images/gcash_qr.png",
   "receiptSamplePhoto": "res:images/receipt.png",
   "defaultProductFallbackImage": "res:images/photo-1540420773420-3366772f4999-w600.jpg",
   "farmerProfileBanner": "res:images/photo-1500937386664-56d1dfef3854-w1400.jpg",
@@ -1222,13 +1408,6 @@
    "role": "farmer",
    "address": "Sunnyvale Farm, Bauan, Batangas",
    "farmerId": 1
-  },
-  {
-   "fullName": "Administrator",
-   "email": "admin@agritourism.ph",
-   "phone": "+63 2 8555 0100",
-   "role": "admin",
-   "address": "AgriTourism Philippines Office, Lipa City, Batangas"
   }
  ],
  "guides": [
@@ -1549,25 +1728,20 @@
  "settings": {
   "delivery_fee": "70",
   "delivery_eta": "Within 1-2 days",
-  "product_categories": "Vegetables,Fruits,Others",
-  "gcash_merchant_name": "AgriTourism Philippines Co.",
-  "gcash_number": "+63 917 890 1234",
-  "bank_name": "BDO Unibank (Batangas City Branch)",
-  "bank_account_name": "AgriTourism Network PH Inc.",
-  "bank_account_number": "0045-8912-3401"
+  "product_categories": "Vegetables,Fruits,Others"
  },
   "faqs": [
     {
       "question": "How do I book a farm tour or fruit picking?",
-      "answer": "Create a free tourist account, then open Explore Tours or Fruit Picking. Choose a date, time slot and number of guests, pick a payment method and confirm. Your ticket appears under My Bookings."
+      "answer": "Create a free tourist account, then open Explore Tours or Fruit Picking. Choose a date and available time slot, then pay at the farm. Your ticket appears under My Bookings."
     },
     {
       "question": "Can I look around without an account?",
       "answer": "Yes. The opening page shows every farm, product and orchard with photos and full descriptions. You only need to log in to book, buy produce or leave a review."
     },
     {
-      "question": "How do I pay?",
-      "answer": "Tours and orders can be paid by GCash, bank transfer, cash on delivery or at the farm. No receipt upload is needed; the farm confirms your payment."
+      "question": "What payment methods are accepted?",
+      "answer": "For farm product orders, customers can use Cash on Delivery (COD), where available. For tour bookings, payment is made directly at the farm through Pay at the Farm."
     },
     {
       "question": "Can I change or cancel a booking?",
@@ -1575,7 +1749,7 @@
     },
     {
       "question": "How long does produce delivery take?",
-      "answer": "Most orders arrive within 1-2 days. Follow your order step by step in Delivery Tracking and mark it received when it arrives."
+      "answer": "Most orders arrive within 1-2 days. Contact the farm through the details on its profile for an order update."
     },
     {
       "question": "How do I change my profile photo?",
