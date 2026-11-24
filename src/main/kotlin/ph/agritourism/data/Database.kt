@@ -42,13 +42,17 @@ class Database(
 
     init {
         file.parentFile?.mkdirs()
+        // Opening a JDBC connection creates the file immediately, so decide whether this was an
+        // existing database before connecting. Fresh databases must not produce a junk backup.
+        val existingDatabase = (file.exists() && file.length() > 0L) ||
+            File(file.absolutePath + "-wal").exists() || File(file.absolutePath + "-shm").exists()
         Class.forName("org.sqlite.JDBC")
         conn = DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}")
         conn.createStatement().use {
             it.execute("PRAGMA foreign_keys = ON")
             it.execute("PRAGMA journal_mode = WAL")
         }
-        backupBeforeMigration()
+        backupBeforeMigration(existingDatabase)
         createSchema()
         if (count("products") == 0 && count("tours") == 0) seed()
         // Fresh databases are seeded after migrate(); backfill their demo accounts and galleries too.
@@ -211,15 +215,18 @@ class Database(
      * Copies an existing database before any additive migration runs. The backup lives beside the
      * database in `backups/` and is never overwritten, so old records remain recoverable.
      */
-    private fun backupBeforeMigration() {
-        if (!file.exists() || file.length() == 0L) return
+    private fun backupBeforeMigration(existingDatabase: Boolean) {
+        if (!existingDatabase) return
         val pending = runCatching {
             query("SELECT value FROM settings WHERE key=?", MIGRATION_V2_MARKER) { it.getString(1) }.firstOrNull() != "complete"
         }.getOrDefault(true)
         if (!pending) return
         runCatching { conn.createStatement().use { it.execute("PRAGMA wal_checkpoint(TRUNCATE)") } }
         val dir = File(file.absoluteFile.parentFile, "backups").apply { mkdirs() }
-        val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        // Second-level stamps collide when two migrations happen within the same second, which
+        // silently skipped the backup. A short UUID keeps every backup file distinct.
+        val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) +
+            "-" + java.util.UUID.randomUUID().toString().take(8)
         val dest = File(dir, "${file.nameWithoutExtension}-before-v2-$stamp.db")
         if (!dest.exists()) {
             runCatching {
