@@ -19,6 +19,36 @@ enum class Role(val key: String, val displayName: String, val subtitle: String, 
 
 const val COD_PAYMENT_METHOD = "Cash on Delivery"
 const val PAY_AT_FARM_PAYMENT_METHOD = "Pay at the Farm"
+const val PHONE_DIGITS_REQUIRED = 11
+
+/** Normalises +63 / 09XX / 9XX input to an 11-digit Philippine mobile number. */
+fun phoneDigits(value: String): String {
+    val digits = value.filter(Char::isDigit)
+    return when {
+        digits.length == 12 && digits.startsWith("63") -> "0" + digits.drop(2)
+        digits.length == 10 && digits.startsWith("9") -> "0$digits"
+        else -> digits
+    }
+}
+
+/** Accepts only phone-shaped input and only Philippine mobile numbers after normalisation. */
+fun isValidPhone(value: String): Boolean {
+    val raw = value.trim()
+    if (raw.isEmpty() || raw.any { !it.isDigit() && !it.isWhitespace() && it !in "+-()" }) return false
+    val digits = phoneDigits(raw)
+    return digits.length == PHONE_DIGITS_REQUIRED && digits.startsWith("09")
+}
+
+enum class AvailabilityStatus(val label: String) {
+    AVAILABLE("Available"), LIMITED("Limited slots"), FULL("Fully booked"), UNAVAILABLE("Unavailable"),
+}
+
+fun availabilityStatus(bookingEnabled: Boolean, remainingPax: Int, capacity: Int): AvailabilityStatus = when {
+    !bookingEnabled -> AvailabilityStatus.UNAVAILABLE
+    remainingPax <= 0 -> AvailabilityStatus.FULL
+    capacity > 0 && remainingPax <= maxOf(1, capacity / 5) -> AvailabilityStatus.LIMITED
+    else -> AvailabilityStatus.AVAILABLE
+}
 
 /** Parses ISO (2026-11-20) or display (Nov 20, 2026) dates. */
 fun parseDate(d: String): java.time.LocalDate? {
@@ -120,7 +150,19 @@ data class User(val id: Long, val fullName: String, val email: String, val phone
                 /** Profile photo chosen by the user (blank = role default). */
                 val avatarUrl: String = "",
                 val isActive: Boolean = true,
-                val createdAt: String = "")
+                val createdAt: String = "",
+                val firstName: String = "",
+                val middleName: String = "",
+                val lastName: String = "",
+                val houseNo: String = "",
+                val street: String = "",
+                val municipality: String = "",
+                val city: String = "",
+                /** Non-null while the account and all of its content are in the Admin Trash Bin. */
+                val deletedAt: String? = null) {
+    val completeName: String get() = listOf(firstName, middleName, lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { fullName }
+    val completeAddress: String get() = listOf(houseNo, street, municipality, city).filter { it.isNotBlank() }.joinToString(", ").ifBlank { address }
+}
 
 @Serializable
 enum class TourPriceStatus(val label: String) {
@@ -340,6 +382,37 @@ data class FarmerProfile(
     val generation: String,
     val hectares: String,
     val gallery: List<String>,
+    /** Maximum number of pax this farm can accommodate across its confirmed bookings. */
+    val capacity: Int = 100,
+    val deletedAt: String? = null,
+)
+
+/** An ordered image belonging to a listing, farm profile or farm cover. */
+data class ListingImage(
+    val id: Long = 0,
+    val ownerType: String,
+    val ownerId: Long,
+    val url: String,
+    val sortOrder: Int = 0,
+    val isCover: Boolean = false,
+    val deletedAt: String? = null,
+)
+
+/** Complete soft-deleted farmer bundle shown in the Admin Trash Bin. */
+data class TrashFarmer(
+    val user: User,
+    val farm: FarmerProfile?,
+    val tours: List<FarmTour>,
+    val orchards: List<FruitPickingItem>,
+    val products: List<Product>,
+    val images: List<ListingImage>,
+    val deletedAt: String,
+)
+
+/** Outcome of an admin farmer deletion; failures are files that could not be removed after commit. */
+data class FarmerDeletionResult(
+    val accountDeleted: Boolean,
+    val failedUploads: List<String> = emptyList(),
 )
 
 @Serializable

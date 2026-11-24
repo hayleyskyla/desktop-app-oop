@@ -241,6 +241,46 @@ fun AdminProductsPage(s: AppState) {
 }
 
 @Composable
+fun AdminTrashBinPage(s: AppState) {
+    LaunchedEffect(s.activePage) { s.refreshFromDb() }
+    H1("Admin Trash Bin")
+    Sub("Soft-deleted farmer accounts are kept intact here until restored or permanently removed")
+    GlassCard(Modifier.fillMaxWidth()) {
+        SectionHeader("Deleted Farmer Accounts", "Every farm record, listing and image is preserved for restoration") {
+            Pill("${s.trashFarmers.size} in trash", Color(0xFFFEF3C7), Color(0xFF92400E))
+        }
+        if (s.trashFarmers.isEmpty()) Sub("The Trash Bin is empty.")
+        s.trashFarmers.forEach { item ->
+            var error by remember(item.user.id) { mutableStateOf<String?>(null) }
+            Column(Modifier.fillMaxWidth().testTag("trash-row-${item.user.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(item.user.completeName, fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                        Sub("${item.user.email} · ${item.farm?.farmName ?: "No linked farm"} · Moved ${item.deletedAt}")
+                    }
+                    Pill("${item.tours.size} tours · ${item.orchards.size} orchards · ${item.products.size} products · ${item.images.size} photos")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    PrimaryButton("Restore", icon = Icons.Filled.Restore) {
+                        s.confirm("Restore Farmer Account?", "Restore ${item.user.completeName} with every original farm record, listing, image and ID?", "Restore", "Cancel") {
+                            error = s.restoreFarmerAccount(item.user.id)
+                        }
+                    }
+                    SecondaryButton("Delete Permanently", icon = Icons.Outlined.DeleteForever, color = Palette.Red) {
+                        s.confirm("Delete Permanently?", "This cannot be undone. ${item.user.completeName}'s trashed account and listed farm data will be removed; historical bookings and orders stay.", "Delete Permanently", "Cancel") {
+                            error = s.permanentlyDeleteFarmerAccount(item.user.id)
+                        }
+                    }
+                }
+                ErrorBanner(error)
+                HorizontalDivider(color = Palette.Border)
+            }
+        }
+    }
+    DashboardAccountFooter(s)
+}
+
+@Composable
 private fun AdminReadOnlyTable(title: String, subtitle: String, headers: List<String>, rows: List<List<String>>) {
     GlassCard(Modifier.fillMaxWidth()) {
         SectionHeader(title, subtitle) { Pill("${rows.size} records", Palette.Mint, Palette.Forest) }
@@ -280,6 +320,25 @@ fun FarmerDashboard(s: AppState) {
         StatCard("Total Products", "${s.farmProducts.size}", "Active in marketplace", Color(0xFFDFF1E6), Modifier.weight(1f)) { s.navigate(Page.FARMER_PRODUCTS) }
         StatCard("New Orders", "${s.openOrders.size}", "Ready for packing & delivery", Color(0xFFDDEAF8), Modifier.weight(1f)) { s.navigate(Page.FARMER_ORDERS) }
         StatCard("Active Bookings", "${s.activeBookings.size}", "Upcoming farm visitors", Color(0xFFFCEBD6), Modifier.weight(1f)) { s.navigate(Page.MY_BOOKINGS) }
+    }
+    val farmId = s.myFarmId
+    var capacityText by remember(farmId) { mutableStateOf(s.capacityFor(farmId).toString()) }
+    var capacityError by remember(farmId) { mutableStateOf<String?>(null) }
+    GlassCard {
+        SectionHeader("Farm Capacity", "Set the maximum number of visitors accepted across all confirmed tours and orchards") {
+            val remaining = s.availablePaxFor(farmId)
+            val capacity = s.capacityFor(farmId)
+            Pill(if (remaining <= 0) "Fully booked" else "$remaining of $capacity remaining",
+                if (remaining <= 0) Color(0xFFFEE2E2) else Palette.Mint,
+                if (remaining <= 0) Color(0xFF991B1B) else Palette.Forest)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Field("Capacity (persons)", capacityText, { v -> capacityText = v.filter(Char::isDigit).take(5) },
+                Modifier.weight(1f), "e.g. 100", number = true)
+            SecondaryButton("Save Capacity") { capacityError = s.saveFarmCapacity(capacityText) }
+        }
+        Sub("Confirmed visitors: ${s.paxHeldFor(farmId)} · Capacity cannot be lower than confirmed bookings.")
+        ErrorBanner(capacityError)
     }
     GlassCard {
         SectionHeader("Farm Sales & Revenue Graph", "Monthly produce orders and booking revenue (PHP, last 6 months)") { Pill("Total: $PESO${money(s.totalRevenue)}") }

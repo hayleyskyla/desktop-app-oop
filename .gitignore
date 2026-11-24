@@ -8,3 +8,6 @@ out/
 .DS_Store
 *.log
 local.properties
+# Installer files - upload separately
+dist/*.exe
+dist/*.msi

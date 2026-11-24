@@ -15,12 +15,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ph.agritourism.data.Database
 import ph.agritourism.model.BookingDateWindow
 import ph.agritourism.model.Product
 import ph.agritourism.model.Role
+import ph.agritourism.model.isValidPhone
 import ph.agritourism.model.bookingTotal
 import ph.agritourism.model.NO_BOOKING_SCHEDULE_MESSAGE
 import ph.agritourism.ui.*
@@ -29,8 +32,8 @@ import java.time.ZoneOffset
 
 @Composable
 fun Overlays(s: AppState) {
-    if (s.isNotificationsOpen && s.isLoggedIn) NotificationsDrawer(s)
-    s.selectedNotification?.let { NotificationDetail(s, it.id) }
+    if (s.isNotificationsOpen && s.isLoggedIn && !s.isAdmin) NotificationsDrawer(s)
+    if (!s.isAdmin) s.selectedNotification?.let { NotificationDetail(s, it.id) }
     if (s.isProfileModalOpen) ProfileModal(s)
     if (s.isAddProductModalOpen) AddProductModal(s)
     if (s.isAddBookingModalOpen) AddBookingModal(s)
@@ -71,7 +74,7 @@ private fun NotificationsDrawer(s: AppState) {
                 Icon(Icons.Outlined.Notifications, null, tint = Color(0xFF86EFAC)); Spacer(Modifier.width(8.dp))
                 Text("Notification", Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.ExtraBold)
                 if (s.unreadCount > 0) Pill("${s.unreadCount} New", Color(0xFF86EFAC), Palette.Deep)
-                TextAction("Close", color = Color.White) { s.isNotificationsOpen = false }
+                CloseAction(color = Color.White, onClick = { s.isNotificationsOpen = false })
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (s.roleFilteredNotifications.isEmpty()) Sub("No new items for this account.", Modifier.padding(24.dp))
@@ -136,7 +139,7 @@ private fun NotificationDetail(s: AppState, id: Long) {
                         else -> Page.MY_BOOKINGS
                     })
                 }
-                TextAction("Close") { close() }
+                CloseAction(onClick = { close() })
             }
         }
     }
@@ -157,24 +160,52 @@ private fun ProfileModal(s: AppState) {
                 }
             }
             TextButton({ pickImageFile("Choose profile photo")?.let(s::changeAvatar) }, Modifier.handCursor()) { Text("Change Photo", fontWeight = FontWeight.Bold) }
-            var name by remember { mutableStateOf(s.displayName) }
+            val u = s.currentUser
             var email by remember { mutableStateOf(s.userEmail) }
-            var phone by remember { mutableStateOf(s.currentUser?.phone.orEmpty()) }
-            var location by remember { mutableStateOf(s.currentUser?.address.orEmpty()) }
+            var firstName by remember { mutableStateOf(u?.firstName.orEmpty()) }
+            var middleName by remember { mutableStateOf(u?.middleName.orEmpty()) }
+            var lastName by remember { mutableStateOf(u?.lastName.orEmpty()) }
+            var houseNo by remember { mutableStateOf(u?.houseNo.orEmpty()) }
+            var street by remember { mutableStateOf(u?.street.orEmpty()) }
+            var municipality by remember { mutableStateOf(u?.municipality.orEmpty()) }
+            var city by remember { mutableStateOf(u?.city.orEmpty()) }
+            var phone by remember { mutableStateOf(u?.phone.orEmpty()) }
             var error by remember { mutableStateOf<String?>(null) }
+            val composedName = listOf(firstName, middleName, lastName).filter { it.isNotBlank() }.joinToString(" ")
+            val composedAddress = listOf(houseNo, street, municipality, city).filter { it.isNotBlank() }.joinToString(", ")
             H2(s.displayName); Pill("${s.userRole.key} Account".uppercase())
             Field("Email Address", email, { email = it.trim() }, Modifier.fillMaxWidth(), "you@email.com", icon = Icons.Outlined.Mail, testTag = "profile-email")
-            Field("Full Name", name, { name = it }, Modifier.fillMaxWidth(), icon = Icons.Outlined.Person, testTag = "profile-name")
-            Field("Contact Phone", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" } }, Modifier.fillMaxWidth(), "+63 912 345 6789", icon = Icons.Outlined.Phone, testTag = "profile-phone")
-            Field("Location", location, { location = it }, Modifier.fillMaxWidth(), "City or address", icon = Icons.Outlined.Place, testTag = "profile-location")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field("First Name", firstName, { firstName = it }, Modifier.weight(1f), testTag = "profile-first-name")
+                Field("Middle Name", middleName, { middleName = it }, Modifier.weight(1f), testTag = "profile-middle-name")
+                Field("Last Name", lastName, { lastName = it }, Modifier.weight(1f), testTag = "profile-last-name")
+            }
+            Field("Mobile Number", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" }.take(16) }, Modifier.fillMaxWidth(),
+                "09XX XXX XXXX (11 digits)", icon = Icons.Outlined.Phone, testTag = "profile-phone")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field("House No.", houseNo, { houseNo = it }, Modifier.weight(1f), testTag = "profile-house-no")
+                Field("Street", street, { street = it }, Modifier.weight(1f), testTag = "profile-street")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Field("Municipality", municipality, { municipality = it }, Modifier.weight(1f), testTag = "profile-municipality")
+                Field("City / Province", city, { city = it }, Modifier.weight(1f), testTag = "profile-city")
+            }
+            Text("Full name: ${composedName.ifBlank { "—" }}", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.testTag("profile-name"))
+            Text("Address: ${composedAddress.ifBlank { "—" }}", fontSize = 11.sp, color = Palette.Muted, modifier = Modifier.testTag("profile-location"))
             ErrorBanner(error)
             PrimaryButton("Save Changes", Modifier.fillMaxWidth()) {
-                val changed = name.trim() != s.displayName || !email.trim().equals(s.userEmail, true) ||
-                    phone.trim() != s.currentUser?.phone.orEmpty() || location.trim() != s.currentUser?.address.orEmpty()
+                val currentParts = listOf(u?.firstName.orEmpty(), u?.middleName.orEmpty(), u?.lastName.orEmpty(),
+                    u?.houseNo.orEmpty(), u?.street.orEmpty(), u?.municipality.orEmpty(), u?.city.orEmpty())
+                val editedParts = listOf(firstName, middleName, lastName, houseNo, street, municipality, city)
+                val changed = currentParts != editedParts || !email.trim().equals(s.userEmail, true) || phone.trim() != u?.phone.orEmpty()
                 error = when {
                     !changed -> null
                     email.isBlank() -> "Email cannot be empty."
-                    else -> s.updateProfile(name, phone, location, email)
+                    firstName.isBlank() || lastName.isBlank() -> "Enter your first and last name."
+                    !isValidPhone(phone) -> "Enter a valid 11-digit mobile number."
+                    listOf(houseNo, street, municipality, city).any { it.isBlank() } -> "Complete all address fields."
+                    else -> s.updateProfile(composedName, phone, null, email,
+                        firstName, middleName, lastName, houseNo, street, municipality, city)
                 }
                 if (error == null) close()
             }
@@ -215,7 +246,7 @@ private fun ProductDetailModal(s: AppState, product: Product) {
                 PrimaryButton("Add to Cart", Modifier.weight(1f), Icons.Filled.Add, enabled = product.stock > quantity) {
                     s.addToCart(product)
                 }
-                TextAction("Back") { close() }
+                BackAction(onClick = { close() })
             }
         }
     }
@@ -254,6 +285,20 @@ private fun AddProductModal(s: AppState) {
                     }
                 }
             }
+            PhotoGalleryEditor(
+                s = s,
+                title = "More Product Photos",
+                images = s.newProductGallery,
+                limit = Database.MAX_IMAGES_PER_LISTING - 1,
+                onAdd = { added -> s.newProductGallery = (s.newProductGallery + added).distinct().take(Database.MAX_IMAGES_PER_LISTING - 1) },
+                onRemove = { url -> s.newProductGallery = s.newProductGallery.filterNot { it == url } },
+                onMakeCover = { url ->
+                    val oldCover = s.newProductImage
+                    s.newProductImage = url
+                    s.newProductGallery = (s.newProductGallery.filterNot { it == url } + oldCover).filter { it.isNotBlank() }
+                        .distinct().take(Database.MAX_IMAGES_PER_LISTING - 1)
+                },
+            )
             if (s.isAdmin) {
                 val farmOptions = listOf(0) + s.farmers.map { it.id }
                 Dropdown("Farm Seller", farmOptions, s.adminListingFarmId ?: 0, { id ->
@@ -293,14 +338,18 @@ private fun AddBookingModal(s: AppState) {
             Column(Modifier.padding(22.dp)) {
                 Sub("Your farm has no tours yet, so walk-in tour bookings aren't available.")
                 Spacer(Modifier.height(12.dp))
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { TextAction("Close") { close0() } }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { CloseAction(onClick = { close0() }) }
             }
         }
         return
     }
     val tour = s.myTours.firstOrNull { it.name == s.newBookingActivity } ?: s.myTours.first()
     val slots = s.availableSlotsFor("tour", tour.id)
+    val remaining = s.availablePaxFor(tour)
+    val capacity = s.capacityFor(tour.farmerId)
+    val status = s.availabilityFor(tour)
     LaunchedEffect(tour.id, slots) { if (s.newBookingTime !in slots) s.newBookingTime = slots.firstOrNull().orEmpty() }
+    LaunchedEffect(tour.id, remaining) { if (s.newBookingGuests > remaining.coerceAtLeast(1)) s.newBookingGuests = remaining.coerceAtLeast(1) }
     Modal(close, 600.dp) {
         ModalHeader("Create Tour Booking", "Farmer manual booking for walk-in tourists or phone reservations", Icons.Outlined.EventAvailable, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -319,14 +368,25 @@ private fun AddBookingModal(s: AppState) {
                     if (slots.isEmpty()) Sub(NO_BOOKING_SCHEDULE_MESSAGE)
                 }
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Label("Number of Persons")
+                    Sub("Remaining: $remaining of $capacity")
+                }
+                Stepper(s.newBookingGuests, "Pax", max = remaining.coerceAtLeast(1)) { s.newBookingGuests = it }
+                Spacer(Modifier.width(10.dp))
+                AvailabilityPill(status, remaining, capacity)
+            }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
                 Label("Calculated Total Payment")
-                Text("$PESO${money(tour.bookingTotal(1))}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
+                Text("$PESO${money(tour.bookingTotal(s.newBookingGuests))}", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Palette.Forest)
             }
             Label("Payment Method")
             ChoiceRow(WALK_IN_PAYMENT_METHODS, s.newBookingPayment) { s.newBookingPayment = it }
             PrimaryButton("Confirm", Modifier.fillMaxWidth(),
-                enabled = s.newBookingCustomer.isNotBlank() && isValidDate(s.newBookingDate) && s.newBookingTime in slots) { s.saveFarmerBooking() }
+                enabled = s.newBookingCustomer.isNotBlank() && isValidPhone(s.newBookingPhone) &&
+                    isValidDate(s.newBookingDate) && s.newBookingTime in slots &&
+                    s.newBookingGuests in 1..remaining.coerceAtLeast(0)) { s.saveFarmerBooking() }
         }
     }
 }

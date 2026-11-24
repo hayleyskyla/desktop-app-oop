@@ -21,7 +21,7 @@ import kotlin.random.Random
 enum class Page {
     DASHBOARD, HOME, FARM_DETAIL, FRUIT_PICKING, MARKET, FARMERS_STORIES, MY_BOOKINGS, CART_CHECKOUT,
     WISHLIST, MY_PURCHASES, FARMER_ORDERS, FARMER_PRODUCTS, FARMER_PROFILE, SIGNUP, LOGIN, FARM_SETUP,
-    PLATFORM_SETTINGS, ADMIN_TOURS, ADMIN_FRUIT_PICKING, ADMIN_PRODUCTS, HELP
+    PLATFORM_SETTINGS, ADMIN_TOURS, ADMIN_FRUIT_PICKING, ADMIN_PRODUCTS, TRASH_BIN, HELP
 }
 
 enum class SearchResultType { FARM, TOUR, ORCHARD, PRODUCT }
@@ -144,6 +144,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var farmerOrders by mutableStateOf(db.orders())
     var notifications by mutableStateOf(db.notifications())
     var userAccounts by mutableStateOf(db.users())
+    /** Soft-deleted farmer accounts restored from the Admin Trash Bin. */
+    var trashFarmers by mutableStateOf(db.deletedFarmers())
     var adminListingFarmId by mutableStateOf<Int?>(null)
     var favoriteIds by mutableStateOf(emptySet<Long>())
     var cart by mutableStateOf(emptyList<CartItem>())
@@ -229,6 +231,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     var newProductStock by mutableStateOf("25")
     var newProductDesc by mutableStateOf("")
     var newProductImage by mutableStateOf(images.presetTomatoImage.ifBlank { "res:images/photo-1598170845058-32b9d6a5da37-w600.jpg" })
+    /** Extra product photos kept in the shared listing_images gallery; the main photo is separate. */
+    var newProductGallery by mutableStateOf<List<String>>(emptyList())
 
     init {
         newProductImage = products.firstOrNull { it.id == 101L }?.imageUrl ?: newProductImage
@@ -345,6 +349,30 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     val myFarmId: Int? get() = if (isFarmer) currentUser?.farmerId else null
     val myFarm: FarmerProfile? get() = myFarmId?.let { id -> farmers.firstOrNull { it.id == id } }
     val myFarmLabel: String get() = myFarm?.farmName ?: if (isAdmin) "All Partner Farms" else "Your Farm"
+
+    // ---------------------------------------------------------------- capacity & availability
+    fun capacityFor(farmId: Int?): Int = db.farmCapacity(farmId)
+    fun paxHeldFor(farmId: Int?): Int = db.confirmedPaxForFarm(farmId)
+    fun availablePaxFor(farmId: Int?): Int = db.availablePaxForFarm(farmId)
+    fun availablePaxFor(tour: FarmTour): Int = availablePaxFor(tour.farmerId)
+    fun availablePaxFor(item: FruitPickingItem): Int = availablePaxFor(item.farmerId)
+
+    fun availabilityFor(tour: FarmTour): AvailabilityStatus =
+        availabilityStatus(tour.bookingEnabled, availablePaxFor(tour), capacityFor(tour.farmerId))
+
+    fun availabilityFor(item: FruitPickingItem): AvailabilityStatus =
+        availabilityStatus(true, availablePaxFor(item), capacityFor(item.farmerId))
+
+    /** Updates the signed-in farmer's capacity; returns an error or null on success. */
+    fun saveFarmCapacity(capacityText: String): String? {
+        val farmId = myFarmId ?: return "Only farmers linked to a farm can set capacity."
+        val capacity = capacityText.trim().toIntOrNull() ?: return "Enter a positive whole number."
+        val error = runCatching { db.setFarmCapacity(farmId, capacity) }.exceptionOrNull()?.message
+        if (error != null) return error
+        farmers = db.farmers()
+        showToast("Farm capacity set to $capacity pax.")
+        return null
+    }
 
     /** Which farm runs the tour/orchard a booking is for. */
     fun farmOf(b: Booking): Int? =
@@ -476,7 +504,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         Page.CART_CHECKOUT -> isTourist
         Page.FARMER_ORDERS, Page.FARMER_PRODUCTS -> isFarmer
         Page.FARMER_PROFILE -> isFarmer
-        Page.PLATFORM_SETTINGS, Page.ADMIN_TOURS, Page.ADMIN_FRUIT_PICKING, Page.ADMIN_PRODUCTS -> isAdmin
+        Page.PLATFORM_SETTINGS, Page.ADMIN_TOURS, Page.ADMIN_FRUIT_PICKING, Page.ADMIN_PRODUCTS, Page.TRASH_BIN -> isAdmin
         Page.FARM_SETUP -> isFarmer && myFarmId != null
     }
 
@@ -529,14 +557,22 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         }
     }
 
+    fun farmerIdFor(type: String, id: Int): Int? = when (type) {
+        "tour" -> allTours.firstOrNull { it.id == id }?.farmerId
+        "orchard" -> allOrchards.firstOrNull { it.id == id }?.farmerId
+        else -> null
+    }
+
     fun availableSlotsFor(type: String, id: Int): List<String> {
         if (type == "tour" && tours.firstOrNull { it.id == id }?.bookingEnabled != true) return emptyList()
+        if (availablePaxFor(farmerIdFor(type, id)) <= 0) return emptyList()
         return slotsFor(type, id).filter { db.bookingScheduleError(type, id, it) == null }
     }
 
     /** Reloads every observable collection from SQLite without showing a toast (used by live dashboards). */
     fun refreshFromDb() {
         allProducts = db.products(); bookings = db.bookings(); farmerOrders = db.orders(); userAccounts = db.users()
+        trashFarmers = db.deletedFarmers()
         notifications = db.notifications(); reviews = db.reviews(); allTours = db.tours(); allOrchards = db.fruitPicking()
         farmers = db.farmers(); faqs = db.faqs(); settings = db.settings(); images = db.images(); guides = db.guides(); couriers = db.couriers(); timeSlots = db.timeSlots()
         currentUser = currentUser?.let { db.findUser(it.email) }
@@ -570,7 +606,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         checkoutStep = 1; lastPlacedOrder = null; purchaseConfirmationOrder = null
         isNotificationsOpen = false
         selectedNotification = null
-        isProfileModalOpen = false; isAddProductModalOpen = false; editingProductId = null; pendingConfirm = null; editingTour = null; editingOrchard = null; isAddBookingModalOpen = false
+        isProfileModalOpen = false; isAddProductModalOpen = false; editingProductId = null; newProductGallery = emptyList()
+        pendingConfirm = null; editingTour = null; editingOrchard = null; isAddBookingModalOpen = false
         selectedBookingForView = null; selectedBookingForTicket = null; editingBooking = null; deletingBookingId = null; reviewingBooking = null
         selectedOrderForView = null; selectedReceipt = null; selectedProductForView = null; editingFarmerStory = null
         adminListingFarmId = null
@@ -580,6 +617,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         tourPaymentMethod = PAY_AT_FARM_PAYMENT_METHOD
         fruitPaymentMethod = PAY_AT_FARM_PAYMENT_METHOD
         newBookingPayment = PAY_AT_FARM_PAYMENT_METHOD
+        tourGuests = 1; fruitGuests = 2; newBookingGuests = 1
         showToast("Signed out successfully. Welcome to AgriTourism Philippines!")
     }
 
@@ -618,14 +656,24 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     }
 
     /** Creates the account in the users table; returns an error message or null on success. */
-    fun signup(fullName: String, email: String, phone: String, password: String, role: Role,
-               farmName: String = "", province: String = ""): String? {
+    fun signup(
+        fullName: String, email: String, phone: String, password: String, role: Role,
+        farmName: String = "", province: String = "",
+        firstName: String = "", middleName: String = "", lastName: String = "",
+        houseNo: String = "", street: String = "", municipality: String = "", city: String = "",
+    ): String? {
         if (role == Role.ADMIN) return "Administrator accounts cannot be self-registered."
+        if (!isValidPhone(phone)) return "Enter a valid 11-digit mobile number (09XX XXX XXXX or +63 9XX XXX XXXX)."
         if (role == Role.FARMER && (farmName.isBlank() || province.isBlank())) return "Farmers must enter their farm name and province."
+        val structured = listOf(firstName, middleName, lastName, houseNo, street, municipality, city).any { it.isNotBlank() }
+        if (structured && listOf(firstName, lastName, houseNo, street, municipality, city).any { it.isBlank() }) {
+            return "Complete the first name, last name, house number, street, municipality, and city."
+        }
         if (db.findUser(email) != null) return "An account with this email already exists."
         val u = db.tx {
-            val created = db.createUser(fullName, email, phone, password, role.key)!!
-            if (role == Role.FARMER) db.createFarm(created.id, fullName, farmName, province, images.defaultProductFallbackImage, images.farmerProfileBanner)
+            val created = db.createUser(fullName, email, phone, password, role.key,
+                firstName, middleName, lastName, houseNo, street, municipality, city)!!
+            if (role == Role.FARMER) db.createFarm(created.id, created.fullName, farmName, province, images.defaultProductFallbackImage, images.farmerProfileBanner)
             db.findUser(email)!!
         }
         farmers = db.farmers()
@@ -653,42 +701,95 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         return null
     }
 
-    /**
-     * Permanently deletes a farmer account and its active farm data. Historical bookings,
-     * orders, and payments are retained; listings are archived so they disappear from the
-     * marketplace without orphaning their history.
-     */
+    /** Permanently deletes a farmer account together with every listing, file and dependent record it owns. */
     fun deleteFarmerAccount(userId: Long): String? {
         if (!isAdmin) return "Only administrators can delete accounts."
         val account = userAccounts.firstOrNull { it.id == userId } ?: return "That account no longer exists."
         if (account.role != Role.FARMER) return "Only farmer accounts can be deleted."
         if (account.id == currentUser?.id) return "You cannot delete your own account."
-        if (!db.deleteFarmerAccount(userId)) return "That account no longer exists."
+        val result = try {
+            db.deleteFarmerAccountCascade(userId)
+        } catch (e: Exception) {
+            return "Could not delete farmer account: ${e.message ?: "unknown error"}"
+        }
+        if (!result.accountDeleted) return "That account no longer exists."
+        refreshTrashAndCatalog()
+        if (result.failedUploads.isEmpty()) {
+            showToast("${account.fullName}'s account and all associated farm content were permanently deleted.")
+        } else {
+            showToast("Account deleted, but ${result.failedUploads.size} uploaded file(s) could not be removed.")
+        }
+        return null
+    }
+
+    private fun refreshTrashAndCatalog() {
+        trashFarmers = db.deletedFarmers()
         farmers = db.farmers(); userAccounts = db.users(); allTours = db.tours(); allOrchards = db.fruitPicking()
         allProducts = db.products(); bookings = db.bookings(); farmerOrders = db.orders()
         notifications = db.notifications(); guides = db.guides()
         timeSlots = db.timeSlots(); reviews = db.reviews(); cart = loadCart()
-        showToast("${account.fullName}'s account and active farm data were permanently deleted.")
+    }
+
+    /** Restores every original row and id from the Trash Bin. */
+    fun restoreFarmerAccount(userId: Long): String? {
+        if (!isAdmin) return "Only administrators can restore accounts."
+        val account = trashFarmers.firstOrNull { it.user.id == userId } ?: return "That account is not in the Trash Bin."
+        if (!db.restoreFarmerAccount(userId)) return "That account could not be restored."
+        refreshTrashAndCatalog()
+        showToast("${account.user.fullName}'s account and farm data were restored.")
         return null
     }
 
-    /** Saves the signed-in account's own profile fields; `email` is optional for older callers. */
-    fun updateProfile(fullName: String, phone: String, address: String? = null, email: String? = null): String? {
+    /** Permanently removes an account that is already in the Trash Bin. */
+    fun permanentlyDeleteFarmerAccount(userId: Long): String? {
+        if (!isAdmin) return "Only administrators can empty the Trash Bin."
+        val account = trashFarmers.firstOrNull { it.user.id == userId } ?: return "That account is not in the Trash Bin."
+        val result = try {
+            db.deleteFarmerAccountCascade(userId)
+        } catch (e: Exception) {
+            return "Could not permanently delete farmer account: ${e.message ?: "unknown error"}"
+        }
+        if (!result.accountDeleted) return "That account could not be permanently deleted."
+        refreshTrashAndCatalog()
+        if (result.failedUploads.isEmpty()) {
+            showToast("${account.user.fullName}'s trashed account and farm content were permanently deleted.")
+        } else {
+            showToast("Account deleted, but ${result.failedUploads.size} uploaded file(s) could not be removed.")
+        }
+        return null
+    }
+
+    /** Saves the signed-in account's own profile fields; `email` and `address` are optional for older callers. */
+    fun updateProfile(
+        fullName: String, phone: String, address: String? = null, email: String? = null,
+        firstName: String = "", middleName: String = "", lastName: String = "",
+        houseNo: String = "", street: String = "", municipality: String = "", city: String = "",
+    ): String? {
         val u = currentUser ?: return "You are not logged in."
         val trimmedName = fullName.trim()
         if (trimmedName.isBlank()) return "Name cannot be empty."
-        val nextAddress = address?.trim() ?: u.address
+        if (!isValidPhone(phone)) return "Enter a valid 11-digit mobile number (09XX XXX XXXX or +63 9XX XXX XXXX)."
+        val structured = listOf(firstName, middleName, lastName, houseNo, street, municipality, city).any { it.isNotBlank() }
+        if (structured && listOf(firstName, lastName, houseNo, street, municipality, city).any { it.isBlank() }) {
+            return "Complete the first name, last name, house number, street, municipality, and city."
+        }
+        val composedName = if (structured) {
+            listOf(firstName.trim(), middleName.trim(), lastName.trim()).filter { it.isNotBlank() }.joinToString(" ")
+        } else trimmedName
+        val nextAddress = if (structured) {
+            listOf(houseNo.trim(), street.trim(), municipality.trim(), city.trim()).filter { it.isNotBlank() }.joinToString(", ")
+        } else address?.trim() ?: u.address
         val nextEmail = email?.trim()?.lowercase().orEmpty().ifBlank { u.email }
         val emailChanged = !nextEmail.equals(u.email, ignoreCase = true)
         if (emailChanged && db.findUser(nextEmail) != null) return "An account with this email already exists."
         if (emailChanged && !db.updateUserEmail(u.id, nextEmail)) {
             return "Enter a valid email address that is not already registered."
         }
-        db.updateUserProfile(u.id, trimmedName, phone.trim())
-        if (address != null) db.updateUserAddress(u.id, nextAddress)
+        db.updateUserProfile(u.id, composedName, phone.trim(), firstName, middleName, lastName, houseNo, street, municipality, city)
+        if (address != null || structured) db.updateUserAddress(u.id, nextAddress)
         currentUser = db.users().firstOrNull { it.id == u.id }
         userAccounts = db.users()
-        if (recipientName == u.fullName) recipientName = trimmedName
+        if (recipientName == u.fullName) recipientName = composedName
         if (contactPhone == u.phone) contactPhone = phone.trim()
         if (deliveryAddress == u.address) deliveryAddress = nextAddress
         if (emailChanged) {
@@ -734,7 +835,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     /** Returns an error if the delivery details are incomplete. */
     fun deliveryDetailsError(): String? = when {
         recipientName.isBlank() -> "Please enter the recipient's name."
-        contactPhone.count(Char::isDigit) < 7 -> "Please enter a valid contact number."
+        !isValidPhone(contactPhone) -> "Enter a valid 11-digit mobile number."
         deliveryAddress.isBlank() -> "Please enter a delivery address."
         else -> null
     }
@@ -844,6 +945,12 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     } catch (e: Database.DoubleBookingException) {
         val x = e.existing
         showToast("Double booking: ${b.customerName} already has #${x.bookingCode} (${x.activity}) on ${x.tourDate} at ${slotTime(x.tourTime)}.")
+        false
+    } catch (e: Database.CapacityExceededException) {
+        showToast(e.message ?: "This farm is full for that date.")
+        false
+    } catch (e: IllegalArgumentException) {
+        showToast(e.message ?: "Please check the number of persons.")
         false
     } catch (e: java.sql.SQLException) {
         if (e.message?.contains("UNIQUE", true) == true) { showToast("Double booking: that time slot is already reserved for this customer."); false } else throw e
@@ -990,17 +1097,20 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (!isLoggedIn) { showToast("Please log in using the Log In button at the top header to confirm your booking."); activePage = Page.LOGIN; return }
         if (!isTourist) { showToast("Only tourist accounts can book tours."); return }
         dateError(tourDate)?.let { showToast(it); return }
+        if (tourGuests < 1) { showToast("Please add at least 1 person."); return }
         if (tourPaymentMethod !in TOUR_PAYMENT_METHODS) { showToast("Please choose an available tour payment method."); return }
         val t = selectedTour
         if (!t.bookingEnabled) { showToast("Bookings for this tour are currently unavailable."); return }
+        val left = availablePaxFor(t)
+        if (tourGuests > left) { showToast("Only $left slot(s) are available at ${t.name}. Reduce the number of persons."); return }
         val slots = availableSlotsFor("tour", t.id)
         if (tourTime.isBlank()) tourTime = slots.firstOrNull().orEmpty()
         db.bookingScheduleError("tour", t.id, tourTime)?.let { showToast(it); return }
         val nb = Booking(
             id = newId(), bookingCode = newBookingCode(), farmId = t.id, farmName = t.name,
             customerName = displayName, customerPhone = userPhone, customerEmail = userEmail,
-            activity = t.name, tourDate = tourDate, tourTime = tourTime, participants = 1,
-            totalAmount = t.bookingTotal(1), paymentMethod = tourPaymentMethod, status = "Confirmed",
+            activity = t.name, tourDate = tourDate, tourTime = tourTime, participants = tourGuests,
+            totalAmount = t.bookingTotal(tourGuests), paymentMethod = tourPaymentMethod, status = "Confirmed",
             attendanceStatus = "Pending Confirmation",
             assignedGuide = defaultGuide(t.farmerId, t.farmerName),
         )
@@ -1019,6 +1129,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (fruitGuests < 1) { showToast("Please add at least 1 guest."); return }
         if (fruitPaymentMethod !in TOUR_PAYMENT_METHODS) { showToast("Please choose an available fruit-picking payment method."); return }
         val f = selectedFruit
+        val left = availablePaxFor(f)
+        if (fruitGuests > left) { showToast("Only $left slot(s) are available at ${f.title}. Reduce the number of persons."); return }
         val slots = availableSlotsFor("orchard", f.id)
         if (fruitTime.isBlank()) fruitTime = slots.firstOrNull().orEmpty()
         db.bookingScheduleError("orchard", f.id, fruitTime)?.let { showToast(it); return }
@@ -1042,18 +1154,22 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         if (denied(isFarmer, "create walk-in bookings")) return
         if (myTours.isEmpty()) { showToast("Your farm has no tours to book yet."); return }
         if (newBookingCustomer.isBlank()) { showToast("Please enter the guest's name."); return }
+        if (!isValidPhone(newBookingPhone)) { showToast("Enter a valid 11-digit mobile number for the guest."); return }
         dateError(newBookingDate)?.let { showToast(it); return }
+        if (newBookingGuests < 1) { showToast("Please add at least 1 person."); return }
         if (newBookingPayment !in WALK_IN_PAYMENT_METHODS) { showToast("Please choose an available walk-in payment method."); return }
         val t = myTours.firstOrNull { it.name == newBookingActivity } ?: myTours.first()
+        val left = availablePaxFor(t)
+        if (newBookingGuests > left) { showToast("Only $left slot(s) are available at ${t.name}. Reduce the number of persons."); return }
         val slots = availableSlotsFor("tour", t.id)
         if (newBookingTime.isBlank()) newBookingTime = slots.firstOrNull().orEmpty()
         db.bookingScheduleError("tour", t.id, newBookingTime)?.let { showToast(it); return }
-        val total = t.bookingTotal(1)
+        val total = t.bookingTotal(newBookingGuests)
         val nb = Booking(
             id = newId(), bookingCode = newBookingCode(), farmId = t.id, farmName = t.name,
-            customerName = newBookingCustomer, customerPhone = newBookingPhone.trim().ifBlank { null },
+            customerName = newBookingCustomer, customerPhone = phoneDigits(newBookingPhone),
             customerEmail = null, activity = t.name, tourDate = newBookingDate,
-            tourTime = newBookingTime, participants = 1, totalAmount = total,
+            tourTime = newBookingTime, participants = newBookingGuests, totalAmount = total,
             paymentMethod = newBookingPayment, attendanceStatus = "Pending Confirmation", status = "Confirmed",
             assignedGuide = defaultGuide(t.farmerId, t.farmerName),
         )
@@ -1062,6 +1178,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         isAddBookingModalOpen = false
         showToast("Tour booking created for $newBookingCustomer ($PESO$total)!")
         newBookingCustomer = ""
+        newBookingPhone = ""
+        newBookingGuests = 1
     }
 
     // ---------------------------------------------------------------- reviews
@@ -1274,13 +1392,17 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         editingProductId?.let { id ->
             val old = products.firstOrNull { it.id == id } ?: run { showToast("That product no longer exists."); return }
             if (denied(canEditProduct(old), "edit this product")) return
-            val updated = old.copy(name = newProductName.trim(), category = newProductCategory, price = price, unit = unit, stock = stock, discountPercent = discount,
-                imageUrl = newProductImage.ifBlank { old.imageUrl }, description = newProductDesc.ifBlank { old.description },
-                farmerId = old.farmerId, farmOrigin = old.farmOrigin)
+            val cover = newProductImage.ifBlank { old.imageUrl }
+            val galleryError = saveListingImages("product", id, (listOf(cover) + newProductGallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
+            if (galleryError != null) { showToast(galleryError); return }
+            val updated = db.products().first { it.id == id }.copy(
+                name = newProductName.trim(), category = newProductCategory, price = price, unit = unit, stock = stock, discountPercent = discount,
+                description = newProductDesc.ifBlank { old.description }, farmerId = old.farmerId, farmOrigin = old.farmOrigin,
+            )
             db.updateProduct(updated)
-            allProducts = allProducts.map { if (it.id == id) updated else it }
+            allProducts = db.products()
             cart = cart.map { if (it.product.id == id) it.copy(product = updated) else it }
-            isAddProductModalOpen = false; editingProductId = null
+            isAddProductModalOpen = false; editingProductId = null; newProductGallery = emptyList()
             newProductName = ""; newProductDesc = ""; newProductStock = "25"
             showToast("Saved changes to \"${updated.name}\".")
             return
@@ -1296,8 +1418,10 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             farmerId = myFarmId,
         )
         db.saveProduct(item, db.minSort("products") - 1)
-        allProducts = listOf(item) + allProducts
-        isAddProductModalOpen = false
+        val galleryError = saveListingImages("product", item.id, (listOf(item.imageUrl) + newProductGallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
+        if (galleryError != null) { showToast(galleryError); return }
+        allProducts = db.products()
+        isAddProductModalOpen = false; newProductGallery = emptyList()
         newProductName = ""; newProductDesc = ""; newProductStock = "25"
         showToast("Successfully added \"${item.name}\" (Stock limit: $stock ${item.unit}) to your catalog!")
     }
@@ -1309,6 +1433,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         editingProductId = null
         adminListingFarmId = myFarmId
         newProductName = ""; newProductDesc = ""; newProductStock = "25"; newProductPrice = "100"; newProductUnit = "kg"; newProductDiscount = "0"
+        newProductGallery = emptyList()
         isAddProductModalOpen = true
     }
 
@@ -1319,6 +1444,7 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         newProductName = p.name; newProductCategory = p.category; newProductPrice = money(p.price).replace(",", "")
         newProductUnit = p.unit; newProductStock = p.stock.toString(); newProductDesc = p.description; newProductImage = p.imageUrl
         newProductDiscount = p.discountPercent.toString()
+        newProductGallery = db.listingImages("product", p.id).filterNot { it.isCover }.map { it.url }
         isAddProductModalOpen = true
     }
 
@@ -1352,10 +1478,32 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
     /** Copies a picked image into the app data folder (next to the database) so it keeps working offline; null on failure. */
     fun storeUpload(file: File): String? = runCatching {
         val dir = File(db.file.absoluteFile.parentFile, "uploads").apply { mkdirs() }
-        val dest = File(dir, "${System.currentTimeMillis()}-${file.name}")
+        // Encode spaces so reference cleanup never truncates a file URL.
+        val safeName = file.name.replace(" ", "_")
+        val dest = File(dir, "${System.currentTimeMillis()}-${safeName}")
         file.copyTo(dest, overwrite = true)
         "file:${dest.absolutePath}"
     }.onFailure { showToast("Could not load that photo: ${it.message}") }.getOrNull()
+
+    /** Copies up to the remaining 5-image allowance; returns all successfully stored URLs. */
+    fun storeUploads(files: List<File>, alreadyUsed: Int = 0): List<String> {
+        val room = Database.MAX_IMAGES_PER_LISTING - alreadyUsed.coerceAtLeast(0)
+        if (room <= 0) { showToast("A listing can have at most ${Database.MAX_IMAGES_PER_LISTING} images."); return emptyList() }
+        if (files.size > room) showToast("Only $room more image(s) can be added; the rest were skipped.")
+        return files.take(room).mapNotNull(::storeUpload)
+    }
+
+    fun listingImages(ownerType: String, ownerId: Long, includeDeleted: Boolean = false): List<ListingImage> =
+        db.listingImages(ownerType, ownerId, includeDeleted)
+
+    /** Replaces a gallery safely; unchanged images keep their ids and cover state. */
+    fun saveListingImages(ownerType: String, ownerId: Long, urls: List<String>, coverIndex: Int = 0): String? {
+        val result = runCatching { db.replaceListingImages(ownerType, ownerId, urls, coverIndex) }.exceptionOrNull()
+        if (result != null) return result.message
+        allTours = db.tours(); allOrchards = db.fruitPicking(); allProducts = db.products()
+        farmers = db.farmers()
+        return null
+    }
 
     fun uploadProductImage(file: File) {
         if (denied(isFarmer, "upload product photos")) return
@@ -1433,6 +1581,8 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         val farmerId: Int? = null,
         val amenities: String = "",
         val estimatedDuration: String = "",
+        /** Additional images after [image], which is always the cover. */
+        val gallery: List<String> = emptyList(),
     )
 
     private fun draftFarm(d: ActivityDraft): FarmerProfile? =
@@ -1471,8 +1621,10 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         val tour = FarmTour(0, d.name.trim(), d.location.trim().ifBlank { f.location }, 0.0, 0, d.price.toInt(), d.hours.trim().ifBlank { "8:00 AM - 5:00 PM" },
             d.amenities.split(",").map { it.trim() }.filter { it.isNotEmpty() }, d.activities.split(",").map { it.trim() }.filter { it.isNotEmpty() },
             d.image.ifBlank { f.farmBannerUrl }, d.description.trim(), if (experienceType == "other_activity") "Other Farm Activity" else "New",
-            f.name, emptyList(), f.id, estimatedDuration = d.estimatedDuration.trim(), experienceType = experienceType)
+            f.name, d.gallery.take(Database.MAX_IMAGES_PER_LISTING - 1), f.id,
+            estimatedDuration = d.estimatedDuration.trim(), experienceType = experienceType)
         val id = db.tx { db.createTour(tour).also { db.addTimeSlot("tour", it, slot) } }
+        db.replaceListingImages("tour", id.toLong(), (listOf(tour.imageUrl) + d.gallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
         allTours = db.tours(); farmers = db.farmers(); timeSlots = db.timeSlots()
         isAddTourModalOpen = false
         showToast("Tour \"${tour.name}\" is now listed (#$id).")
@@ -1487,8 +1639,9 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
         val slot = normalizeSlot(d.slot).getOrElse { return it.message }
         val item = FruitPickingItem(0, d.name.trim(), f.farmName, d.location.trim().ifBlank { f.location }, d.fruit.trim(), d.price.toInt(), 0.0, 0,
             d.duration.trim().ifBlank { "2 hours" }, d.fruit.trim(), d.image.ifBlank { f.farmBannerUrl }, d.description.trim(),
-            d.season.trim().ifBlank { "Year-round" }, emptyList(), f.id)
+            d.season.trim().ifBlank { "Year-round" }, d.gallery.take(Database.MAX_IMAGES_PER_LISTING - 1), f.id)
         val id = db.tx { db.createOrchard(item).also { db.addTimeSlot("orchard", it, slot) } }
+        db.replaceListingImages("orchard", id.toLong(), (listOf(item.imageUrl) + d.gallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
         allOrchards = db.fruitPicking(); timeSlots = db.timeSlots()
         isAddOrchardModalOpen = false
         showToast("Fruit picking \"${item.title}\" is now listed (#$id).")
@@ -1512,10 +1665,12 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             estimatedDuration = d.estimatedDuration.trim().ifBlank { old.estimatedDuration },
             experienceType = experienceType,
             highlightTag = if (experienceType == "other_activity") "Other Farm Activity" else old.highlightTag,
-            farmerId = old.farmerId, farmerName = old.farmerName)
+            farmerId = old.farmerId, farmerName = old.farmerName,
+            thumbnails = d.gallery.take(Database.MAX_IMAGES_PER_LISTING - 1))
         db.updateTour(t)
-        allTours = allTours.map { if (it.id == id) t else it }
-        if (selectedTour.id == id) selectedTour = t
+        db.replaceListingImages("tour", id.toLong(), (listOf(t.imageUrl) + d.gallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
+        allTours = db.tours()
+        if (selectedTour.id == id) selectedTour = allTours.first { it.id == id }
         editingTour = null
         showToast("Tour \"${t.name}\" updated.")
         return null
@@ -1592,10 +1747,12 @@ class AppState(val db: Database, private val scope: CoroutineScope) {
             imageUrl = d.image.ifBlank { old.imageUrl }, fruitName = d.fruit.trim(), seasonalFruits = d.fruit.trim(),
             duration = d.duration.trim().ifBlank { old.duration }, seasonAvailability = d.season.trim().ifBlank { old.seasonAvailability },
             location = d.location.trim().ifBlank { old.location },
-            farmName = old.farmName, farmerId = old.farmerId)
+            farmName = old.farmName, farmerId = old.farmerId,
+            thumbnails = d.gallery.take(Database.MAX_IMAGES_PER_LISTING - 1))
         db.updateOrchard(o)
-        allOrchards = allOrchards.map { if (it.id == id) o else it }
-        if (selectedFruit.id == id) selectedFruit = o
+        db.replaceListingImages("orchard", id.toLong(), (listOf(o.imageUrl) + d.gallery).distinct().take(Database.MAX_IMAGES_PER_LISTING))
+        allOrchards = db.fruitPicking()
+        if (selectedFruit.id == id) selectedFruit = allOrchards.first { it.id == id }
         editingOrchard = null
         showToast("\"${o.title}\" updated.")
         return null

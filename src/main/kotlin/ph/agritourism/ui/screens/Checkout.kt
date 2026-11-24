@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
 fun CheckoutPage(s: AppState) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { H1("Your Cart & Checkout"); Sub("Pay the delivery rider in cash when your order arrives") }
-        TextAction("Back") { s.navigate(Page.MARKET) }
+        BackAction { s.navigate(Page.MARKET) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         listOf("1 Cart", "2 Delivery", "3 Payment", "4 Confirmation").forEachIndexed { i, t ->
@@ -56,7 +56,7 @@ fun CheckoutPage(s: AppState) {
                 Spacer(Modifier.weight(1f))
                 PrimaryButton("Proceed to Payment Method →") { s.deliveryDetailsError()?.let(s::showToast) ?: run { s.checkoutStep = 3 } }
                 Spacer(Modifier.width(12.dp))
-                TextAction("Back") { s.checkoutStep = 1 }
+                BackAction { s.checkoutStep = 1 }
             }
         }
         3 -> PaymentStep(s)
@@ -95,7 +95,7 @@ fun CheckoutPage(s: AppState) {
                         s.selectedOrderForView = order
                     }
                     Spacer(Modifier.width(12.dp))
-                    TextAction("Back") { close() }
+                    BackAction { close() }
                 }
             }
         }
@@ -208,7 +208,7 @@ private fun PaymentStep(s: AppState) {
             Spacer(Modifier.weight(1f))
             PrimaryButton("Confirm and Place Order · $PESO${money(s.cartTotal)}", enabled = !s.isPlacingOrder) { s.placeOrder() }
             Spacer(Modifier.width(12.dp))
-            TextAction("Back") { s.checkoutStep = 2 }
+            BackAction { s.checkoutStep = 2 }
         }
     }
 }

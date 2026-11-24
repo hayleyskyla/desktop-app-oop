@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ph.agritourism.data.Database
 import ph.agritourism.model.FarmTour
 import ph.agritourism.model.FarmerProfile
 import ph.agritourism.model.FruitPickingItem
@@ -32,7 +33,7 @@ internal fun CatalogPreviewModal(s: AppState, p: CatalogPreview) {
         Box(Modifier.fillMaxWidth().height(320.dp)) {
             AsyncImage(p.image, Modifier.fillMaxSize(), contentDescription = p.title)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0B2512)))))
-            TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep) { close() }
+            CloseAction(Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep, showLabel = false) { close() }
             Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Pill(p.tag, Color.White.copy(alpha = 0.92f), Palette.Deep)
                 Spacer(Modifier.height(6.dp))
@@ -53,7 +54,7 @@ internal fun CatalogPreviewModal(s: AppState, p: CatalogPreview) {
                     PrimaryButton("Explore More", icon = Icons.AutoMirrored.Outlined.Login) { close(); s.navigate(Page.LOGIN) }
                 }
             }
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { TextAction("Close") { close() } }
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) { CloseAction(onClick = { close() }) }
         }
     }
 }
@@ -76,6 +77,9 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
     var price by remember { mutableStateOf((tour?.pricePerPerson ?: orchardItem?.pricePerPerson)?.toString() ?: "") }
     var desc by remember { mutableStateOf(tour?.description ?: orchardItem?.description ?: "") }
     var image by remember { mutableStateOf(tour?.imageUrl ?: orchardItem?.imageUrl ?: farm?.farmBannerUrl.orEmpty()) }
+    var gallery by remember(tour?.id, orchardItem?.id) {
+        mutableStateOf((tour?.thumbnails ?: orchardItem?.thumbnails ?: emptyList()).distinct().take(Database.MAX_IMAGES_PER_LISTING - 1))
+    }
     var location by remember { mutableStateOf(tour?.location ?: orchardItem?.location ?: farm?.location.orEmpty()) }
     var slot by remember { mutableStateOf("08:00 AM") }
     var hours by remember { mutableStateOf(tour?.operatingHours ?: "8:00 AM - 5:00 PM") }
@@ -115,6 +119,19 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
                     Sub("Defaults to your farm cover photo.")
                 }
             }
+            PhotoGalleryEditor(
+                s = s,
+                title = "Additional Photos",
+                images = gallery,
+                onAdd = { added -> gallery = (gallery + added).distinct().take(Database.MAX_IMAGES_PER_LISTING - 1) },
+                onRemove = { url -> gallery = gallery.filterNot { it == url } },
+                onMakeCover = { url ->
+                    val oldCover = image
+                    image = url
+                    gallery = (gallery.filterNot { it == url } + oldCover).filter { it.isNotBlank() }
+                        .distinct().take(Database.MAX_IMAGES_PER_LISTING - 1)
+                },
+            )
             Field(if (orchard) "Experience Name" else "Tour Name", name, { name = it }, Modifier.fillMaxWidth(),
                 if (orchard) "e.g. Sweet Mango Picking" else "e.g. Sunrise Farm Walk")
             Field("Location", location, { location = it }, Modifier.fillMaxWidth(), "Barangay, city/municipality, province")
@@ -145,7 +162,7 @@ internal fun AddActivityModal(s: AppState, orchard: Boolean, tour: FarmTour? = n
                 if (editing) Icons.Outlined.Save else Icons.Outlined.Publish) {
                 val d = AppState.ActivityDraft(
                     name, price, desc, image, slot, hours, activities, fruit, duration, season,
-                    experienceType, location, ownerId, amenities, estimatedDuration,
+                    experienceType, location, ownerId, amenities, estimatedDuration, gallery,
                 )
                 error = when {
                     tour != null -> s.updateTour(tour.id, d)

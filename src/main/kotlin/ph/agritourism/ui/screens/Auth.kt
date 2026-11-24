@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ph.agritourism.model.Role
+import ph.agritourism.model.isValidPhone
 import ph.agritourism.ui.*
 
 @Composable
@@ -68,7 +69,7 @@ private fun AuthLayout(s: AppState, form: @Composable ColumnScope.() -> Unit) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 48.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.Center, content = form)
             Box(Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 12.dp)) {
-                TextAction("Back", Modifier.align(Alignment.CenterEnd).testTag("back-to-opening")) { s.navigate(Page.HOME) }
+                BackAction(Modifier.align(Alignment.CenterEnd).testTag("back-to-opening")) { s.navigate(Page.HOME) }
             }
         }
     }
@@ -84,8 +85,14 @@ private val EMAIL_RE = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
 
 @Composable
 fun SignupPage(s: AppState) {
-    var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var firstName by remember { mutableStateOf("") }
+    var middleName by remember { mutableStateOf("") }
+    var lastName by remember { mutableStateOf("") }
+    var houseNo by remember { mutableStateOf("") }
+    var street by remember { mutableStateOf("") }
+    var municipality by remember { mutableStateOf("") }
+    var city by remember { mutableStateOf("") }
     var farmName by remember { mutableStateOf("") }
     var province by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -94,28 +101,45 @@ fun SignupPage(s: AppState) {
     var role by remember { mutableStateOf(if (s.userRole == Role.ADMIN) Role.USER else s.userRole) }
     var error by remember { mutableStateOf<String?>(null) }
     var attempted by remember { mutableStateOf(false) }
+    val name = listOf(firstName, middleName, lastName).filter { it.isNotBlank() }.joinToString(" ")
     // Field-level errors appear once the user has tried to submit, then update live as they type.
-    val nameErr = if (attempted && name.isBlank()) "Enter your full name" else null
+    val nameErr = if (attempted && (firstName.isBlank() || lastName.isBlank())) "Enter your first and last name" else null
     val emailErr = when { !attempted -> null; email.isBlank() -> "Enter your email"; !EMAIL_RE.matches(email.trim()) -> "That email doesn't look right"; else -> null }
-    val phoneErr = if (attempted && phone.isNotBlank() && phone.count(Char::isDigit) < 7) "Enter a valid phone number" else null
+    val phoneErr = if (attempted && !isValidPhone(phone)) "Enter a valid 11-digit mobile number" else null
+    val addressErr = if (attempted && listOf(houseNo, street, municipality, city).any { it.isBlank() }) "Complete your address" else null
     val pwErr = when { !attempted -> null; pw.isBlank() -> "Create a password"; pw.length < 6 -> "At least 6 characters"; else -> null }
     val pw2Err = if (attempted && pw2 != pw) "Passwords don't match" else null
     val farmErr = if (attempted && role == Role.FARMER && farmName.isBlank()) "Enter your farm name" else null
     val submit = {
         attempted = true
-        val valid = name.isNotBlank() && EMAIL_RE.matches(email.trim()) && (phone.isBlank() || phone.count(Char::isDigit) >= 7) &&
+        val valid = firstName.isNotBlank() && lastName.isNotBlank() && EMAIL_RE.matches(email.trim()) && isValidPhone(phone) &&
+            listOf(houseNo, street, municipality, city).all { it.isNotBlank() } &&
             pw.length >= 6 && pw == pw2 && (role != Role.FARMER || farmName.isNotBlank())
-        error = if (valid) s.signup(name, email, phone, pw, role, farmName, province) else null
+        error = if (valid) s.signup(name, email, phone, pw, role, farmName, province,
+            firstName, middleName, lastName, houseNo, street, municipality, city) else null
     }
     AuthLayout(s) {
         Brand(); Spacer(Modifier.height(18.dp))
         H1("Create Your Account"); Sub("Join our community and support local farmers!")
         Spacer(Modifier.height(18.dp))
         Column(Modifier.animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Field("Full Name", name, { name = it }, placeholder = "Juan Dela Cruz", icon = Icons.Outlined.Person, error = nameErr, onSubmit = submit)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Field("First Name", firstName, { firstName = it }, Modifier.weight(1f), "Juan", error = nameErr, onSubmit = submit)
+                Field("Middle Name", middleName, { middleName = it }, Modifier.weight(1f), "Optional", onSubmit = submit)
+                Field("Last Name", lastName, { lastName = it }, Modifier.weight(1f), "Dela Cruz", error = nameErr, onSubmit = submit)
+            }
             Field("Email Address", email, { email = it.trim() }, placeholder = "you@email.com", icon = Icons.Outlined.Mail, error = emailErr, onSubmit = submit)
-            Field("Phone Number", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" } }, placeholder = "Optional",
+            Field("Mobile Number", phone, { v -> phone = v.filter { it.isDigit() || it in "+ -()" }.take(16) }, placeholder = "09XX XXX XXXX (11 digits)",
                 icon = Icons.Outlined.Phone, error = phoneErr, onSubmit = submit)
+            Label("Complete Address")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Field("House No.", houseNo, { houseNo = it }, Modifier.weight(1f), "123", error = addressErr, onSubmit = submit)
+                Field("Street", street, { street = it }, Modifier.weight(1f), "Mabini St.", error = addressErr, onSubmit = submit)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Field("Municipality", municipality, { municipality = it }, Modifier.weight(1f), "Calamba", error = addressErr, onSubmit = submit)
+                Field("City / Province", city, { city = it }, Modifier.weight(1f), "Laguna", error = addressErr, onSubmit = submit)
+            }
             Field("Password", pw, { pw = it }, placeholder = "At least 6 characters", password = true, icon = Icons.Outlined.Lock, error = pwErr, onSubmit = submit)
             Field("Confirm Password", pw2, { pw2 = it }, placeholder = "Re-enter password", password = true, icon = Icons.Outlined.Lock, error = pw2Err, onSubmit = submit)
             Dropdown("I am a…", listOf(Role.USER, Role.FARMER), role, {

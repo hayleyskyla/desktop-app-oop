@@ -129,17 +129,20 @@ private fun TopBar(s: AppState, isOpeningPage: Boolean = false) {
             }
         }
         if (s.isLoggedIn) {
-            BadgedIcon(Icons.Outlined.Notifications, s.unreadCount, "Notification") { s.isNotificationsOpen = !s.isNotificationsOpen }
-            Spacer(Modifier.width(8.dp))
-            if (s.isTourist) {
-                Row(Modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, Palette.Border, RoundedCornerShape(12.dp))
-                    .handCursor().clickable { s.checkoutStep = 1; s.navigate(Page.CART_CHECKOUT) }.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    BadgedBox({ if (s.cart.isNotEmpty()) Badge(containerColor = Palette.Forest) { Text("${s.cart.size}") } }) {
-                        Icon(Icons.Outlined.ShoppingBag, "Cart", tint = Palette.Forest, modifier = Modifier.size(18.dp))
+            // The admin dashboard has no notification bell; other roles keep their existing alerts.
+            if (!s.isAdmin) {
+                BadgedIcon(Icons.Outlined.Notifications, s.unreadCount, "Notification") { s.isNotificationsOpen = !s.isNotificationsOpen }
+                Spacer(Modifier.width(8.dp))
+                if (s.isTourist) {
+                    Row(Modifier.clip(RoundedCornerShape(12.dp)).border(1.dp, Palette.Border, RoundedCornerShape(12.dp))
+                        .handCursor().clickable { s.checkoutStep = 1; s.navigate(Page.CART_CHECKOUT) }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        BadgedBox({ if (s.cart.isNotEmpty()) Badge(containerColor = Palette.Forest) { Text("${s.cart.size}") } }) {
+                            Icon(Icons.Outlined.ShoppingBag, "Cart", tint = Palette.Forest, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text("$PESO${money(s.cartValue)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Palette.Deep)
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text("$PESO${money(s.cartValue)}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Palette.Deep)
                 }
             }
             Spacer(Modifier.width(12.dp))
@@ -196,6 +199,7 @@ private fun Sidebar(s: AppState) {
                     item(Icons.Outlined.Map, "Tour", s.activePage == Page.ADMIN_TOURS) { s.navigate(Page.ADMIN_TOURS) }
                     item(Icons.Outlined.AutoAwesome, "Fruit Picking", s.activePage == Page.ADMIN_FRUIT_PICKING) { s.navigate(Page.ADMIN_FRUIT_PICKING) }
                     item(Icons.Outlined.Agriculture, "Products", s.activePage == Page.ADMIN_PRODUCTS) { s.navigate(Page.ADMIN_PRODUCTS) }
+                    item(Icons.Outlined.Delete, "Trash Bin", s.activePage == Page.TRASH_BIN) { s.navigate(Page.TRASH_BIN) }
                 }
                 if (s.userRole == Role.FARMER) {
                     item(Icons.Outlined.CalendarMonth, "Tourist Bookings & Check-In", s.activePage == Page.MY_BOOKINGS) { s.navigate(Page.MY_BOOKINGS) }
@@ -352,6 +356,7 @@ private fun PageContent(s: AppState) {
                 p == Page.ADMIN_TOURS -> AdminToursPage(s)
                 p == Page.ADMIN_FRUIT_PICKING -> AdminFruitPickingPage(s)
                 p == Page.ADMIN_PRODUCTS -> AdminProductsPage(s)
+                p == Page.TRASH_BIN -> AdminTrashBinPage(s)
                 p == Page.HELP -> HelpPage(s)
             }
         }
@@ -365,7 +370,7 @@ private fun AccessDeniedNotice(s: AppState) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(44.dp), tint = Palette.Muted)
             H2(if (s.isLoggedIn) "Access restricted" else "Please log in")
             Sub(if (s.isLoggedIn) "Your ${s.userRole.subtitle} account does not have permission to view this page." else "You need to log in to view this page.")
-            if (s.isLoggedIn) TextAction("Back") { s.navigate(Page.DASHBOARD) }
+            if (s.isLoggedIn) BackAction { s.navigate(Page.DASHBOARD) }
             else PrimaryButton("Log In") { s.navigate(Page.LOGIN) }
         }
     }
@@ -383,7 +388,7 @@ private fun Toast(s: AppState, modifier: Modifier) {
             Spacer(Modifier.width(10.dp))
             Text(msg.orEmpty(), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Spacer(Modifier.width(12.dp))
-            TextAction("Close", color = Color.White.copy(alpha = 0.8f)) { s.toastMessage = null }
+            CloseAction(color = Color.White.copy(alpha = 0.8f), onClick = { s.toastMessage = null })
         }
     }
 }

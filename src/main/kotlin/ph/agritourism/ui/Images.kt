@@ -116,10 +116,28 @@ fun AsyncImage(src: String, modifier: Modifier = Modifier, contentScale: Content
 
 private val IMAGE_EXTS = setOf("png", "jpg", "jpeg", "webp", "jfif")
 
-/** Opens a native file chooser for a photo; returns the picked file or null if cancelled. */
-fun pickImageFile(title: String): File? {
-    val fd = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-    fd.setFilenameFilter { _, n -> n.substringAfterLast('.').lowercase() in IMAGE_EXTS }
-    fd.isVisible = true
-    return fd.file?.let { File(fd.directory, it) }
+private fun supported(file: File) = file.name.substringAfterLast('.').lowercase() in IMAGE_EXTS
+
+/**
+ * Opens the native chooser for one or more photos. The modal dismiss guard prevents the Compose
+ * editor behind the ownerless AWT dialog from closing when focus changes during selection.
+ */
+fun pickImageFiles(title: String, limit: Int = Database.MAX_IMAGES_PER_LISTING): List<File> {
+    val previous = ModalDismissGuard.suppressed
+    ModalDismissGuard.suppressed = true
+    try {
+        val fd = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
+        fd.isMultipleMode = true
+        fd.setFilenameFilter { _, n -> n.substringAfterLast('.').lowercase() in IMAGE_EXTS }
+        fd.isVisible = true
+        val picked = runCatching { fd.files?.toList().orEmpty() }.getOrNull()
+            ?.filter(::supported)
+            ?: listOfNotNull(fd.file?.let { File(fd.directory, it) }?.takeIf(::supported))
+        return picked.take(limit)
+    } finally {
+        ModalDismissGuard.suppressed = previous
+    }
 }
+
+/** Opens a native file chooser for a photo; returns the picked file or null if cancelled. */
+fun pickImageFile(title: String): File? = pickImageFiles(title, 1).firstOrNull()

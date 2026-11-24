@@ -7,6 +7,7 @@ import kotlinx.coroutines.cancel
 import ph.agritourism.data.AdminSetup
 import ph.agritourism.data.Database
 import ph.agritourism.model.AppNotification
+import ph.agritourism.model.AvailabilityStatus
 import ph.agritourism.model.Courier
 import ph.agritourism.model.Booking
 import ph.agritourism.model.COD_PAYMENT_METHOD
@@ -15,6 +16,7 @@ import ph.agritourism.model.Role
 import ph.agritourism.model.TourPriceStatus
 import ph.agritourism.model.TourPriceType
 import ph.agritourism.model.bookingTotal
+import ph.agritourism.model.phoneDigits
 import ph.agritourism.ui.AppState
 import ph.agritourism.ui.CHECKOUT_PAYMENT_METHODS
 import ph.agritourism.ui.ImageLoader
@@ -229,7 +231,7 @@ class FlowTest {
         s.navigate(Page.MY_PURCHASES)
         assertEquals(Page.MY_PURCHASES, s.activePage)
         s.signOut()
-        assertNull(s.signup("Other Tourist", "other@x.ph", "", "secret1", Role.USER))
+        assertNull(s.signup("Other Tourist", "other@x.ph", "0917 555 4321", "secret1", Role.USER))
         assertTrue(s.visibleOrders.isEmpty())
         assertTrue(s.canAccess(Page.MY_PURCHASES))
         s.loginAs(Role.FARMER)
@@ -274,8 +276,8 @@ class FlowTest {
         s.selectedTour = s.tours[1]; s.tourGuests = 3; s.isTourModalOpen = true
         s.bookSelectedTour()
         val b = s.bookings.first()
-        assertEquals(s.tours[1].pricePerPerson, b.totalAmount)
-        assertEquals(1, b.participants)
+        assertEquals(s.tours[1].bookingTotal(s.tourGuests), b.totalAmount)
+        assertEquals(3, b.participants)
         assertEquals(PAY_AT_FARM_PAYMENT_METHOD, b.paymentMethod)
         assertEquals(b, s.selectedBookingForTicket); assertEquals(Page.MY_BOOKINGS, s.activePage); assertFalse(s.isTourModalOpen)
         s.selectedFruit = s.fruitPicking[0]; s.fruitGuests = 2; s.bookSelectedFruit()
@@ -316,7 +318,7 @@ class FlowTest {
         s.newProductName = "Test Kamote"; s.newProductStock = "12"; s.newProductImage = "res:fruit_picking/kamoteng_kahoy.jpg"
         s.saveProduct()
         assertEquals("Test Kamote", s.products.first().name); assertEquals("/kg", s.products.first().unit)
-        s.newBookingCustomer = "Walk In"; s.newBookingGuests = 3; s.saveFarmerBooking()
+        s.newBookingCustomer = "Walk In"; s.newBookingPhone = "0917 111 2222"; s.newBookingGuests = 3; s.saveFarmerBooking()
         assertEquals("Walk In", s.bookings.first().customerName)
         assertEquals(PAY_AT_FARM_PAYMENT_METHOD, s.bookings.first().paymentMethod)
         assertFalse(s.products.first { it.name == "Test Kamote" }.archived)
@@ -408,8 +410,8 @@ class FlowTest {
         assertTrue(s.login())
         assertEquals(Role.USER, s.userRole)
         s.signOut()
-        assertNotNull(s.signup("Dup", Role.USER.email, "", "secret1", Role.USER))
-        assertNotNull(s.signup("Boss", "boss@x.ph", "", "secret1", Role.ADMIN))
+        assertNotNull(s.signup("Dup", Role.USER.email, "0917 555 9999", "secret1", Role.USER))
+        assertNotNull(s.signup("Boss", "boss@x.ph", "0917 555 8888", "secret1", Role.ADMIN))
         assertEquals(1, db.runSql("SELECT COUNT(*) FROM users WHERE role='admin'").rows.single().single().toInt())
         val admin = assertNotNull(db.findUser(adminEmail))
         assertEquals(Role.ADMIN, admin.role)
@@ -462,13 +464,16 @@ class FlowTest {
         assertEquals(Page.DASHBOARD, s.activePage)
     }
 
-    @Test fun deleteFarmerAccountCascadesFarmData() {
+    @Test fun farmerTrashBinRestoresOriginalsAndAdminDeleteRemovesEverything() {
         val farmer = s.userAccounts.first { it.role == Role.FARMER && it.farmerId != null }
         val farmId = farmer.farmerId!!
         val farm = s.farmers.first { it.id == farmId }
         val tourIds = s.allTours.filter { it.farmerId == farmId }.map { it.id }.toSet()
         val orchardIds = s.allOrchards.filter { it.farmerId == farmId }.map { it.id }.toSet()
         val productIds = s.allProducts.filter { it.farmerId == farmId }.map { it.id }.toSet()
+        val archivedBefore = s.allTours.filter { it.id in tourIds }.associate { it.id to it.archived } +
+            s.allOrchards.filter { it.id in orchardIds }.associate { it.id to it.archived } +
+            s.allProducts.filter { it.id in productIds }.associate { it.id to it.archived }
         val farmBookingIds = s.bookings.filter { b ->
             (b.activityType == "tour" && b.farmId in tourIds) || (b.activityType == "orchard" && b.farmId in orchardIds)
         }.map { it.id }.toSet()
@@ -478,11 +483,14 @@ class FlowTest {
         val orderIdsBefore = db.orders().map { it.id }.toSet()
         s.loginAs(Role.ADMIN)
         val otherAdmin = s.userAccounts.first { it.role == Role.ADMIN }
-        assertNull(s.deleteFarmerAccount(farmer.id))
+
+        // The Trash Bin itself is still available for an explicitly soft-deleted account.
+        assertTrue(db.softDeleteFarmerAccount(farmer.id))
+        s.refreshFromDb()
         assertFalse(s.userAccounts.any { it.id == farmer.id })
         assertFalse(s.farmers.any { it.id == farmId })
-
-        // Active listings are hidden from every catalog but kept as archived history rows.
+        assertTrue(s.trashFarmers.any { it.user.id == farmer.id })
+        assertTrue(s.trashFarmers.first { it.user.id == farmer.id }.tours.map { it.id }.containsAll(tourIds))
         assertTrue(s.tours.none { it.id in tourIds })
         assertTrue(s.fruitPicking.none { it.id in orchardIds })
         assertTrue(s.products.none { it.id in productIds })
@@ -491,20 +499,143 @@ class FlowTest {
         assertTrue(s.allProducts.filter { it.id in productIds }.all { it.archived })
         if (farmBookingIds.isNotEmpty()) assertTrue(s.bookings.any { it.id in farmBookingIds })
 
-        // Historical financial and booking records are never silently erased.
+        // Nothing is erased yet: the rows and historical records are still in the database.
         assertEquals(bookingIdsBefore, db.bookings().map { it.id }.toSet())
         assertEquals(orderIdsBefore, db.orders().map { it.id }.toSet())
-
-        // The farm's owner name is gone from the farmer profile table too.
-        assertEquals(0, db.runSql("SELECT COUNT(*) FROM farmers WHERE name='${farm.name.replace("'", "''")}'").rows.single().single().toInt())
-        // Only farmer accounts can be deleted, and admins cannot delete themselves.
+        assertEquals(1, db.runSql("SELECT COUNT(*) FROM farmers WHERE name='${farm.name.replace("'", "''")}'").rows.single().single().toInt())
+        // Only farmer accounts can be trashed, and admins cannot delete themselves.
         assertNotNull(s.deleteFarmerAccount(otherAdmin.id))
         assertNotNull(s.deleteFarmerAccount(s.currentUser!!.id))
+
+        // Restoration puts back the very same rows, ids and original archive flags.
+        assertNull(s.restoreFarmerAccount(farmer.id))
+        assertTrue(s.userAccounts.any { it.id == farmer.id })
+        assertTrue(s.farmers.any { it.id == farmId })
+        assertFalse(s.trashFarmers.any { it.user.id == farmer.id })
+        tourIds.forEach { id ->
+            assertEquals(archivedBefore[id], s.allTours.first { it.id == id }.archived, "restored tour $id")
+        }
+        orchardIds.forEach { id ->
+            assertEquals(archivedBefore[id], s.allOrchards.first { it.id == id }.archived, "restored orchard $id")
+        }
+        productIds.forEach { id ->
+            assertEquals(archivedBefore[id], s.allProducts.first { it.id == id }.archived, "restored product $id")
+        }
+        assertEquals(bookingIdsBefore, db.bookings().map { it.id }.toSet())
+
+        // Emptying the Trash Bin still works only for trashed accounts.
+        assertNotNull(s.permanentlyDeleteFarmerAccount(farmer.id), "an active account cannot be emptied from Trash")
+        assertTrue(db.softDeleteFarmerAccount(farmer.id))
+        s.refreshFromDb()
+        assertNull(s.permanentlyDeleteFarmerAccount(farmer.id))
+        assertNotNull(s.permanentlyDeleteFarmerAccount(farmer.id), "an already deleted account cannot be emptied twice")
+        assertNotNull(s.deleteFarmerAccount(farmer.id), "the account is already gone")
+        assertFalse(db.allUsers().any { it.id == farmer.id })
+        assertEquals(0, db.runSql("SELECT COUNT(*) FROM farmers WHERE id=$farmId").rows.single().single().toInt())
+        assertTrue(s.allTours.none { it.id in tourIds })
+        assertTrue(s.allOrchards.none { it.id in orchardIds })
+        assertTrue(s.allProducts.none { it.id in productIds })
+        assertEquals(bookingIdsBefore, db.bookings().map { it.id }.toSet())
+        assertEquals(orderIdsBefore, db.orders().map { it.id }.toSet())
 
         val touristView = reopen().loginAs(Role.USER)
         assertTrue(touristView.tours.none { it.id in tourIds })
         assertTrue(touristView.fruitPicking.none { it.id in orchardIds })
         assertTrue(touristView.products.none { it.id in productIds })
+    }
+
+    @Test fun adminFarmerDeletionCascadesOnlyThatFarmerAndCleansUploads() {
+        fun sqlText(value: String) = "'" + value.replace("'", "''") + "'"
+
+        val targetEmail = "cascade-target-${java.util.UUID.randomUUID()}@test.invalid"
+        val keepEmail = "cascade-keep-${java.util.UUID.randomUUID()}@test.invalid"
+        assertNull(s.signup("Cascade Target", targetEmail, "09171110001", "secret1", Role.FARMER,
+            "Target Farm", "Batangas", "Cascade", "", "Target", "1", "Main St", "Bauan", "Batangas"))
+        assertNull(s.signup("Cascade Keep", keepEmail, "09171110002", "secret1", Role.FARMER,
+            "Keep Farm", "Batangas", "Cascade", "", "Keep", "2", "Main St", "Bauan", "Batangas"))
+        s.signOut()
+
+        val targetUser = assertNotNull(db.findUser(targetEmail))
+        val keepUser = assertNotNull(db.findUser(keepEmail))
+        val targetFarmId = assertNotNull(targetUser.farmerId)
+        val keepFarmId = assertNotNull(keepUser.farmerId)
+
+        val targetTour = db.tours()[0]
+        val keepTour = db.tours()[1]
+        val targetOrchard = db.fruitPicking()[0]
+        val keepOrchard = db.fruitPicking()[1]
+        val targetProduct = db.products()[0]
+        val keepProduct = db.products()[1]
+        listOf(targetTour.id to targetFarmId, keepTour.id to keepFarmId).forEach { (id, farm) ->
+            db.runSql("UPDATE tours SET farmer_id=$farm WHERE id=$id")
+        }
+        listOf(targetOrchard.id to targetFarmId, keepOrchard.id to keepFarmId).forEach { (id, farm) ->
+            db.runSql("UPDATE fruit_picking SET farmer_id=$farm WHERE id=$id")
+        }
+        listOf(targetProduct.id to targetFarmId, keepProduct.id to keepFarmId).forEach { (id, farm) ->
+            db.runSql("UPDATE products SET farmer_id=$farm WHERE id=$id")
+        }
+
+        val uploadDir = File(db.file.parentFile, "uploads").apply { mkdirs() }
+        val targetOnly = File(uploadDir, "cascade-target-only-${java.util.UUID.randomUUID()}.png").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val shared = File(uploadDir, "cascade-shared-${java.util.UUID.randomUUID()}.png").apply { writeBytes(byteArrayOf(4, 5, 6)) }
+        val targetUrl = "file:${targetOnly.absolutePath}"
+        val sharedUrl = "file:${shared.absolutePath}"
+        db.runSql("UPDATE tours SET image_url=${sqlText(targetUrl)} WHERE id=${targetTour.id}")
+        db.runSql("UPDATE products SET image_url=${sqlText(sharedUrl)} WHERE id=${targetProduct.id}")
+        db.runSql("UPDATE products SET image_url=${sqlText(sharedUrl)} WHERE id=${keepProduct.id}")
+        db.runSql("INSERT INTO listing_images (owner_type, owner_id, url) VALUES ('tour', ${targetTour.id}, ${sqlText(targetUrl)})")
+        db.runSql("INSERT INTO listing_images (owner_type, owner_id, url) VALUES ('product', ${keepProduct.id}, ${sqlText(sharedUrl)})")
+
+        db.runSql("INSERT INTO time_slots (activity_type, activity_id, label, sort_order) VALUES ('tour', ${targetTour.id}, 'Cascade Morning', 1)")
+        db.runSql("INSERT INTO time_slots (activity_type, activity_id, label, sort_order) VALUES ('orchard', ${targetOrchard.id}, 'Cascade Pick', 1)")
+        db.runSql("INSERT INTO guides (farmer_id, name) VALUES ($targetFarmId, 'Cascade Guide')")
+        db.runSql("INSERT INTO guides (farmer_id, name) VALUES ($keepFarmId, 'Keep Guide')")
+        db.runSql("""INSERT INTO reviews (id, author, role_tag, rating, review_date, farm_or_crop, comment, target_type, target_id)
+            VALUES (990201, 'Guest', 'Tourist', 5, '2026-01-01', 'Target Tour', 'Great', 'tour', ${targetTour.id})""")
+        db.setFavorite(Role.USER.email, targetTour.id.toLong(), true)
+        db.setFavorite(Role.USER.email, keepTour.id.toLong(), true)
+        db.setCartItem(Role.USER.email, targetProduct.id, 1, 1)
+        db.setCartItem(Role.USER.email, keepProduct.id, 1, 2)
+        db.saveNotification(AppNotification(990202, "Target alert", "x", "x", "now", false, "system", "farmer", recipientEmail = targetEmail))
+
+        val bookingIdsBefore = db.bookings().map { it.id }.toSet()
+        val orderIdsBefore = db.orders().map { it.id }.toSet()
+
+        s.loginAs(Role.ADMIN)
+        assertNull(s.deleteFarmerAccount(targetUser.id))
+
+        assertNull(db.allUsers().firstOrNull { it.id == targetUser.id })
+        assertNotNull(db.findUser(keepEmail))
+        assertTrue(db.allFarmers().none { it.id == targetFarmId })
+        assertTrue(db.allFarmers().any { it.id == keepFarmId })
+        assertTrue(db.tours().none { it.id == targetTour.id })
+        assertTrue(db.tours().any { it.id == keepTour.id })
+        assertTrue(db.fruitPicking().none { it.id == targetOrchard.id })
+        assertTrue(db.fruitPicking().any { it.id == keepOrchard.id })
+        assertTrue(db.products().none { it.id == targetProduct.id })
+        assertTrue(db.products().any { it.id == keepProduct.id })
+
+        assertTrue(db.listingImages("tour", targetTour.id.toLong(), true).isEmpty())
+        assertTrue(db.listingImages("orchard", targetOrchard.id.toLong(), true).isEmpty())
+        assertTrue(db.listingImages("product", targetProduct.id, true).isEmpty())
+        assertTrue(db.listingImages("product", keepProduct.id, true).any { it.url == sharedUrl })
+        assertEquals(0, db.runSql("SELECT COUNT(*) FROM time_slots WHERE activity_type='tour' AND activity_id=${targetTour.id}").rows.single().single().toInt())
+        assertEquals(0, db.runSql("SELECT COUNT(*) FROM time_slots WHERE activity_type='orchard' AND activity_id=${targetOrchard.id}").rows.single().single().toInt())
+        assertEquals(0, db.runSql("SELECT COUNT(*) FROM guides WHERE farmer_id=$targetFarmId").rows.single().single().toInt())
+        assertEquals(1, db.runSql("SELECT COUNT(*) FROM guides WHERE farmer_id=$keepFarmId").rows.single().single().toInt())
+        assertEquals(0, db.runSql("SELECT COUNT(*) FROM reviews WHERE target_type='tour' AND target_id=${targetTour.id}").rows.single().single().toInt())
+        assertFalse(targetTour.id.toLong() in db.favorites(Role.USER.email))
+        assertTrue(keepTour.id.toLong() in db.favorites(Role.USER.email))
+        assertFalse(db.cart(Role.USER.email).any { it.first == targetProduct.id })
+        assertTrue(db.cart(Role.USER.email).any { it.first == keepProduct.id })
+        assertTrue(db.notifications().none { it.recipientEmail == targetEmail })
+
+        assertEquals(bookingIdsBefore, db.bookings().map { it.id }.toSet())
+        assertEquals(orderIdsBefore, db.orders().map { it.id }.toSet())
+        assertFalse(targetOnly.exists(), "unreferenced upload must be deleted")
+        assertTrue(shared.exists(), "upload still used by another farmer must be kept")
+        shared.delete()
     }
 
     @Test fun touristCanDeleteOnlyTheirOwnCancelledPurchases() {
@@ -1131,7 +1262,7 @@ class FlowTest {
         assertFailsWith<Database.DoubleBookingException> { db.saveBooking(dup) }
         assertFails { db.runSql("INSERT INTO bookings (id, booking_code, status, slot_key) VALUES (999998, 'X', 'Confirmed', '${dup.slotKey()}')") }
         // A different customer can take the same slot.
-        s.loginAs(Role.FARMER); s.newBookingCustomer = "Walk In"; s.newBookingDate = s.tourDate; s.newBookingTime = TOUR_TIME_SLOTS[0]
+        s.loginAs(Role.FARMER); s.newBookingCustomer = "Walk In"; s.newBookingPhone = "0917 222 3333"; s.newBookingDate = s.tourDate; s.newBookingTime = TOUR_TIME_SLOTS[0]
         s.saveFarmerBooking(); assertEquals("Walk In", s.bookings.first().customerName)
     }
 
@@ -1210,6 +1341,7 @@ class FlowTest {
         s.newBookingActivity = walkInTour.name
         s.newBookingDate = java.time.LocalDate.now().plusDays(8).toString()
         s.newBookingCustomer = "Walk-in Schedule Test"
+        s.newBookingPhone = "0917 333 4444"
         s.newBookingTime = afterHours
         val beforeWalkIn = s.bookings.size
         s.saveFarmerBooking()
@@ -1478,5 +1610,117 @@ class FlowTest {
         assertFalse(s.canCancelOrder(s.farmerOrders.first { it.id == o.id }))
         // The owning tourist can permanently delete only their cancelled purchase; admins cannot.
         s.deleteOrder(o.id); assertTrue(db.orders().none { it.id == o.id })
+    }
+
+    @Test fun phoneValidationAndStructuredAccountFieldsPersist() {
+        listOf("", "0917", "9175551234x", "12345678901").forEachIndexed { i, bad ->
+            assertNotNull(s.signup("Bad $i", "bad$i@x.ph", bad, "secret1", Role.USER), "phone '$bad' must be rejected")
+        }
+        assertNull(s.signup("Valid Person", "valid@x.ph", "+63 917 555 0111", "secret1", Role.USER,
+            firstName = "Valid", middleName = "Q", lastName = "Person",
+            houseNo = "12", street = "Main St", municipality = "Bauan", city = "Batangas"))
+        val created = db.findUser("valid@x.ph")!!
+        assertEquals("+63 917 555 0111", created.phone)
+        assertEquals("09175550111", phoneDigits(created.phone))
+        assertEquals("Valid Q Person", created.fullName)
+        assertEquals("Valid", created.firstName)
+        assertEquals("Person", created.lastName)
+        assertEquals("12, Main St, Bauan, Batangas", created.address)
+
+        assertNotNull(s.updateProfile("Valid Q Person", "0917", null, null,
+            "Valid", "Q", "Person", "12", "Main St", "Bauan", "Batangas"))
+        assertEquals("+63 917 555 0111", db.findUser("valid@x.ph")!!.phone, "invalid phone must not overwrite the saved number")
+        assertNull(s.updateProfile("Valid Q Person", "0917 222 3333", null, null,
+            "Valid", "Q", "Person", "12", "Main St", "Bauan", "Batangas"))
+        assertEquals("0917 222 3333", db.findUser("valid@x.ph")!!.phone)
+    }
+
+    @Test fun farmCapacityAndAvailabilityBlockOverbooking() {
+        s.loginAs(Role.FARMER)
+        val farmId = s.myFarmId!!
+        val tour = s.myTours.first()
+        val used = db.confirmedPaxForFarm(farmId)
+        assertNull(s.saveFarmCapacity((used + 2).toString()))
+        assertEquals(used + 2, s.capacityFor(farmId))
+        assertEquals(AvailabilityStatus.AVAILABLE, s.availabilityFor(tour))
+
+        s.newBookingActivity = tour.name
+        s.newBookingCustomer = "Capacity One"
+        s.newBookingPhone = "0917 444 5555"
+        s.newBookingGuests = 2
+        s.newBookingTime = s.availableSlotsFor("tour", tour.id).firstOrNull().orEmpty()
+        s.saveFarmerBooking()
+        assertNotNull(s.bookings.firstOrNull { it.customerName == "Capacity One" && it.participants == 2 })
+        assertEquals(0, s.availablePaxFor(farmId))
+        assertEquals(AvailabilityStatus.FULL, s.availabilityFor(tour))
+
+        s.newBookingCustomer = "Capacity Two"
+        s.newBookingPhone = "0917 444 6666"
+        s.newBookingGuests = 1
+        s.newBookingTime = s.availableSlotsFor("tour", tour.id).firstOrNull().orEmpty()
+        s.saveFarmerBooking()
+        assertNull(s.bookings.firstOrNull { it.customerName == "Capacity Two" }, "a full farm must refuse another booking")
+        assertTrue(s.toastMessage.orEmpty().contains("slot(s) are available"))
+
+        val error = s.saveFarmCapacity(used.toString())
+        assertNotNull(error, "capacity cannot be lowered below confirmed pax")
+        assertTrue(error!!.contains("confirmed pax"))
+        assertEquals(used + 2, s.capacityFor(farmId))
+    }
+
+    @Test fun galleryUploadsAreCappedAtFiveAndSurviveRestart() {
+        val files = List(7) { i ->
+            File.createTempFile("gallery-$i-", ".jpg").apply { writeBytes(byteArrayOf(i.toByte(), 1, 2, 3)) }
+        }
+        try {
+            val urls = s.storeUploads(files, 2)
+            assertEquals(Database.MAX_IMAGES_PER_LISTING - 2, urls.size)
+            val tour = s.tours.first()
+            assertNull(s.saveListingImages("tour", tour.id.toLong(), urls))
+            assertEquals(urls.toSet(), db.listingImages("tour", tour.id.toLong()).map { it.url }.toSet())
+
+            val tooMany = (1..(Database.MAX_IMAGES_PER_LISTING + 1)).map { "file:rejected-$it.jpg" }
+            val error = s.saveListingImages("tour", tour.id.toLong(), tooMany)
+            assertNotNull(error)
+            assertTrue(error!!.contains("at most ${Database.MAX_IMAGES_PER_LISTING}"))
+            assertEquals(urls.toSet(), db.listingImages("tour", tour.id.toLong()).map { it.url }.toSet(),
+                "a rejected gallery must not be partially applied")
+
+            val restored = reopen()
+            assertEquals(urls.toSet(), restored.db.listingImages("tour", tour.id.toLong()).map { it.url }.toSet())
+            urls.forEach { File(it.removePrefix("file:")).delete() }
+        } finally {
+            files.forEach { it.delete() }
+        }
+    }
+
+    @Test fun legacyDatabaseIsBackedUpAndMigratedWithoutLosingRecords() {
+        val backupDir = File(file.absoluteFile.parentFile, "backups")
+        val backupPrefix = "${file.nameWithoutExtension}-before-v2-"
+        val backupsBefore = backupDir.listFiles()?.count { it.name.startsWith(backupPrefix) && it.extension == "db" } ?: 0
+        val email = Role.USER.email
+        val nameBefore = db.findUser(email)!!.fullName
+        val bookingIds = db.bookings().map { it.id }.toSet()
+        val orderIds = db.orders().map { it.id }.toSet()
+
+        db.runSql("DELETE FROM settings WHERE key='${Database.MIGRATION_V2_MARKER}'")
+        listOf("first_name", "last_name", "middle_name", "house_no", "street", "municipality", "city", "deleted_at")
+            .forEach { db.runSql("ALTER TABLE users DROP COLUMN $it") }
+        listOf("capacity", "deleted_at").forEach { db.runSql("ALTER TABLE farmers DROP COLUMN $it") }
+        listOf("tours", "fruit_picking", "products").forEach { table ->
+            listOf("deleted_at", "archived_before_delete").forEach { db.runSql("ALTER TABLE $table DROP COLUMN $it") }
+        }
+        db.close()
+
+        val migrated = Database(file, adminSetup)
+        db = migrated
+        s = AppState(db, scope)
+        val backupsAfter = backupDir.listFiles()?.count { it.name.startsWith(backupPrefix) && it.extension == "db" } ?: 0
+        assertEquals(backupsBefore + 1, backupsAfter, "a pre-migration backup must be written exactly once")
+        assertEquals("complete", db.runSql("SELECT value FROM settings WHERE key='${Database.MIGRATION_V2_MARKER}'").rows.single().single())
+        assertEquals(nameBefore, db.findUser(email)!!.fullName)
+        assertTrue(db.findUser(email)!!.firstName.isNotBlank())
+        assertEquals(bookingIds, db.bookings().map { it.id }.toSet())
+        assertEquals(orderIds, db.orders().map { it.id }.toSet())
     }
 }

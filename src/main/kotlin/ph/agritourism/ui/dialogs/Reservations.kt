@@ -34,7 +34,7 @@ internal fun Gallery(images: List<String>) = Row(horizontalArrangement = Arrange
 private fun HeroImage(src: String, tag: String, onClose: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(240.dp)) {
         AsyncImage(src, Modifier.fillMaxSize())
-        TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep, onClick = onClose)
+        CloseAction(Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep, showLabel = false, onClick = onClose)
         Pill(tag, Color.White.copy(alpha = 0.92f), Palette.Deep, Modifier.align(Alignment.BottomStart).padding(14.dp))
     }
 }
@@ -51,7 +51,11 @@ private fun TotalBox(left: String, payment: String, total: Int) {
 internal fun TourModal(s: AppState) {
     val t = s.selectedTour
     val close = { s.isTourModalOpen = false }
-    val total = t.bookingTotal(1)
+    val remaining = s.availablePaxFor(t)
+    val capacity = s.capacityFor(t.farmerId)
+    val status = s.availabilityFor(t)
+    LaunchedEffect(t.id, remaining) { if (s.tourGuests > remaining.coerceAtLeast(1)) s.tourGuests = remaining.coerceAtLeast(1) }
+    val total = t.bookingTotal(s.tourGuests)
     val priceDescription = when (t.priceType) {
         TourPriceType.PER_PERSON -> "$PESO${t.pricePerPerson} per person"
         TourPriceType.PER_GROUP -> "$PESO${t.pricePerPerson} per group"
@@ -99,9 +103,20 @@ internal fun TourModal(s: AppState) {
                     if (t.priceSuggestionBasis.isNotBlank()) Sub(t.priceSuggestionBasis)
                     if (t.priceSuggestionSource.isNotBlank()) Text("Source: ${t.priceSuggestionSource}", fontSize = 11.sp, color = Palette.Forest)
                     Sub("The farm must have a valid tour schedule before an administrator can enable bookings.")
+                    AvailabilityPill(status, remaining, capacity)
                 }
             } else {
                 Text("Customize Your Tour Booking", fontWeight = FontWeight.ExtraBold, color = Palette.Deep)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Label("Number of Persons")
+                        Sub("Farm capacity: $capacity · Remaining: $remaining")
+                    }
+                    Stepper(s.tourGuests, "Pax", max = remaining.coerceAtLeast(1)) { s.tourGuests = it }
+                    Spacer(Modifier.width(10.dp))
+                    AvailabilityPill(status, remaining, capacity)
+                }
+                if (remaining <= 0) Text("This farm is fully booked. Choose another date or listing.", fontSize = 12.sp, color = Palette.Red)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     DateField("Tour Schedule Date", s.tourDate, { s.tourDate = it }, Modifier.weight(1f))
                     val slots = s.availableSlotsFor("tour", t.id)
@@ -113,9 +128,10 @@ internal fun TourModal(s: AppState) {
                 }
                 Label("Select Tour Payment Method")
                 ChoiceRow(TOUR_PAYMENT_METHODS, s.tourPaymentMethod) { s.tourPaymentMethod = it }
-                TotalBox(priceDescription, "Payment via ${s.tourPaymentMethod}", total)
+                TotalBox("$priceDescription × ${s.tourGuests}", "Payment via ${s.tourPaymentMethod}", total)
                 PrimaryButton("Confirm", Modifier.fillMaxWidth(), Icons.Outlined.EventAvailable,
-                    enabled = isValidDate(s.tourDate) && s.tourTime in s.availableSlotsFor("tour", t.id)) { s.bookSelectedTour() }
+                    enabled = isValidDate(s.tourDate) && s.tourTime in s.availableSlotsFor("tour", t.id) &&
+                        s.tourGuests in 1..remaining.coerceAtLeast(0)) { s.bookSelectedTour() }
             }
         }
     }
@@ -125,6 +141,10 @@ internal fun TourModal(s: AppState) {
 internal fun FruitModal(s: AppState) {
     val f = s.selectedFruit
     val close = { s.isFruitModalOpen = false }
+    val remaining = s.availablePaxFor(f)
+    val capacity = s.capacityFor(f.farmerId)
+    val status = s.availabilityFor(f)
+    LaunchedEffect(f.id, remaining) { if (s.fruitGuests > remaining.coerceAtLeast(1)) s.fruitGuests = remaining.coerceAtLeast(1) }
     Modal(close, 760.dp) {
         HeroImage(f.imageUrl, f.location, close)
         Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -155,14 +175,21 @@ internal fun FruitModal(s: AppState) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) { Label("Number of Fruit Pickers"); Sub("Includes individual harvesting basket") }
-                Stepper(s.fruitGuests, "Pax") { s.fruitGuests = it }
+                Column(Modifier.weight(1f)) {
+                    Label("Number of Fruit Pickers")
+                    Sub("Includes individual harvesting basket · Remaining: $remaining of $capacity")
+                }
+                Stepper(s.fruitGuests, "Pax", max = remaining.coerceAtLeast(1)) { s.fruitGuests = it }
+                Spacer(Modifier.width(10.dp))
+                AvailabilityPill(status, remaining, capacity)
             }
+            if (remaining <= 0) Text("This orchard is fully booked. Choose another listing.", fontSize = 12.sp, color = Palette.Red)
             Label("Select Fruit Picking Payment Method")
             ChoiceRow(TOUR_PAYMENT_METHODS, s.fruitPaymentMethod) { s.fruitPaymentMethod = it }
             TotalBox("$PESO${f.pricePerPerson} × ${s.fruitGuests} ${if (s.fruitGuests == 1) "picker" else "pickers"}", "Payment via ${s.fruitPaymentMethod}", f.pricePerPerson * s.fruitGuests)
             PrimaryButton("Confirm", Modifier.fillMaxWidth(), Icons.Outlined.AutoAwesome,
-                enabled = isValidDate(s.fruitDate) && s.fruitTime in s.availableSlotsFor("orchard", f.id)) { s.bookSelectedFruit() }
+                enabled = isValidDate(s.fruitDate) && s.fruitTime in s.availableSlotsFor("orchard", f.id) &&
+                    s.fruitGuests in 1..remaining.coerceAtLeast(0)) { s.bookSelectedFruit() }
         }
     }
 }
@@ -225,7 +252,7 @@ internal fun BookingDossier(s: AppState, b0: Booking) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("Save / Print Ticket", icon = Icons.Outlined.Download) { Printing.openHtml("voucher-${b.bookingCode}.html", Printing.bookingDossierHtml(b)) }
-                TextAction("Close") { close() }
+                CloseAction(onClick = { close() })
             }
         }
     }
@@ -278,7 +305,7 @@ internal fun OrderDossier(s: AppState, id: String) {
                             }
                         }
                     }
-                    TextAction("Close") { close() }
+                    CloseAction(onClick = { close() })
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -291,7 +318,7 @@ internal fun OrderDossier(s: AppState, id: String) {
                     if (s.canActOnOrder(o)) {
                         PrimaryButton("Print Order Details") { Printing.openHtml("order-${o.orderNumber}.html", Printing.orderHtml(listOf(o), "Produce Order Details #${o.orderNumber}")) }
                     }
-                    TextAction("Close") { close() }
+                    CloseAction(onClick = { close() })
                 }
             }
         }

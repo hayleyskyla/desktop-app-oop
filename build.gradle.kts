@@ -1,4 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask
 
 plugins {
     kotlin("jvm") version "2.1.20"
@@ -13,6 +14,11 @@ val appVersion = (findProperty("appVersion") as String?) ?: baseVersion
 
 group = "ph.agritourism"
 version = appVersion
+
+// Optional escape hatch for Windows/OneDrive file locks in build/compose during packaging.
+if (project.hasProperty("buildDirOverride")) {
+    layout.buildDirectory.set(file(project.property("buildDirOverride")!!))
+}
 
 kotlin { jvmToolchain(17) }
 
@@ -54,6 +60,11 @@ compose.desktop {
             }
         }
     }
+}
+
+// Generated from icons/pwa-512x512.png (16–256 px) so EXE, MSI and taskbar icons match the app.
+tasks.withType<AbstractJPackageTask>().configureEach {
+    iconFile.set(project.file("src/main/resources/icons/app.ico"))
 }
 
 val releaseDir = layout.buildDirectory.dir("release")

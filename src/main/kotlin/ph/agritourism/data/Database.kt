@@ -48,8 +48,12 @@ class Database(
             it.execute("PRAGMA foreign_keys = ON")
             it.execute("PRAGMA journal_mode = WAL")
         }
+        backupBeforeMigration()
         createSchema()
         if (count("products") == 0 && count("tours") == 0) seed()
+        // Fresh databases are seeded after migrate(); backfill their demo accounts and galleries too.
+        backfillSplitNamesAndAddresses()
+        importLegacyGalleryImages()
         refreshSeedImages()
         syncBundledTours()
         seedReferenceData()
@@ -75,6 +79,9 @@ class Database(
         }
 
         const val DEFAULT_PASSWORD = "password"
+        const val MIGRATION_V2_MARKER = "migration.v2.complete"
+        const val MAX_IMAGES_PER_LISTING = 5
+        const val DEFAULT_FARM_CAPACITY = 100
 
         /** Salted PBKDF2 hash stored as "salt:hash" (hex). */
         fun hashPassword(password: String, salt: ByteArray = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }): String {
@@ -106,13 +113,18 @@ class Database(
                 password_hash TEXT,
                 role TEXT NOT NULL CHECK (role IN ('user','farmer','admin')),
                 is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP)""",
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                first_name TEXT, middle_name TEXT NOT NULL DEFAULT '', last_name TEXT,
+                house_no TEXT NOT NULL DEFAULT '', street TEXT NOT NULL DEFAULT '',
+                municipality TEXT NOT NULL DEFAULT '', city TEXT NOT NULL DEFAULT '',
+                deleted_at TEXT)""",
             """CREATE TABLE IF NOT EXISTS farmers (
                 id INTEGER PRIMARY KEY, name TEXT, role_title TEXT, farm_name TEXT, location TEXT,
                 province TEXT, years_experience INTEGER, photo_url TEXT, farm_banner_url TEXT,
                 story_quote TEXT, full_biography TEXT, farming_philosophy TEXT, certifications TEXT,
                 sustainable_practices TEXT, specialty_produce TEXT, product_ids TEXT, tour_id INTEGER,
-                rating REAL, reviews_count INTEGER, generation TEXT, hectares TEXT, gallery TEXT)""",
+                rating REAL, reviews_count INTEGER, generation TEXT, hectares TEXT, gallery TEXT,
+                capacity INTEGER NOT NULL DEFAULT 100, deleted_at TEXT)""",
             """CREATE TABLE IF NOT EXISTS tours (
                 id INTEGER PRIMARY KEY, name TEXT, location TEXT, rating REAL, reviews_count INTEGER,
                 price_per_person INTEGER, operating_hours TEXT, amenities TEXT, activities TEXT,
@@ -123,15 +135,22 @@ class Database(
                 price_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
                 price_type TEXT NOT NULL DEFAULT 'PER_PERSON',
                 booking_enabled INTEGER NOT NULL DEFAULT 1,
-                experience_type TEXT NOT NULL DEFAULT 'tour')""",
+                experience_type TEXT NOT NULL DEFAULT 'tour',
+                deleted_at TEXT, archived_before_delete INTEGER NOT NULL DEFAULT 0)""",
             """CREATE TABLE IF NOT EXISTS fruit_picking (
                 id INTEGER PRIMARY KEY, title TEXT, farm_name TEXT, location TEXT, fruit_name TEXT,
                 price_per_person INTEGER, rating REAL, reviews_count INTEGER, duration TEXT,
-                seasonal_fruits TEXT, image_url TEXT, description TEXT, season_availability TEXT, thumbnails TEXT)""",
+                seasonal_fruits TEXT, image_url TEXT, description TEXT, season_availability TEXT, thumbnails TEXT,
+                deleted_at TEXT, archived_before_delete INTEGER NOT NULL DEFAULT 0)""",
             """CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT, price REAL, unit TEXT,
                 discount_percent INTEGER, stock INTEGER, rating REAL, reviews_count INTEGER,
-                image_url TEXT, description TEXT, farm_origin TEXT, sort_order INTEGER)""",
+                image_url TEXT, description TEXT, farm_origin TEXT, sort_order INTEGER,
+                deleted_at TEXT, archived_before_delete INTEGER NOT NULL DEFAULT 0)""",
+            """CREATE TABLE IF NOT EXISTS listing_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, owner_type TEXT NOT NULL, owner_id INTEGER NOT NULL,
+                url TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, is_cover INTEGER NOT NULL DEFAULT 0,
+                deleted_at TEXT)""",
             """CREATE TABLE IF NOT EXISTS bookings (
                 id INTEGER PRIMARY KEY, booking_code TEXT, farm_id INTEGER, farm_name TEXT,
                 customer_name TEXT, customer_phone TEXT, customer_email TEXT, activity TEXT,
@@ -185,6 +204,33 @@ class Database(
         )
         conn.createStatement().use { st -> ddl.forEach(st::execute) }
         migrate()
+        exec("CREATE INDEX IF NOT EXISTS idx_listing_images_owner ON listing_images(owner_type, owner_id, sort_order)")
+    }
+
+    /**
+     * Copies an existing database before any additive migration runs. The backup lives beside the
+     * database in `backups/` and is never overwritten, so old records remain recoverable.
+     */
+    private fun backupBeforeMigration() {
+        if (!file.exists() || file.length() == 0L) return
+        val pending = runCatching {
+            query("SELECT value FROM settings WHERE key=?", MIGRATION_V2_MARKER) { it.getString(1) }.firstOrNull() != "complete"
+        }.getOrDefault(true)
+        if (!pending) return
+        runCatching { conn.createStatement().use { it.execute("PRAGMA wal_checkpoint(TRUNCATE)") } }
+        val dir = File(file.absoluteFile.parentFile, "backups").apply { mkdirs() }
+        val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+        val dest = File(dir, "${file.nameWithoutExtension}-before-v2-$stamp.db")
+        if (!dest.exists()) {
+            runCatching {
+                file.copyTo(dest, overwrite = false)
+                listOf("-wal", "-shm").forEach { suffix ->
+                    File(file.absolutePath + suffix).takeIf { it.exists() }?.let {
+                        it.copyTo(File(dest.absolutePath + suffix), overwrite = true)
+                    }
+                }
+            }.onFailure { println("Database backup failed: ${it.message}") }
+        }
     }
 
     private fun columns(table: String): Set<String> =
@@ -236,6 +282,26 @@ class Database(
                  WHERE products.id=order_items.product_id),
                 (SELECT farm_origin FROM products WHERE products.id=order_items.product_id), '')
                 WHERE seller_name=''""")
+        // ---- v2 schema must exist before any DAO helper below queries farmers or listings ----
+        val userCols = columns("users")
+        listOf("first_name", "last_name").forEach { c ->
+            if (c !in userCols) exec("ALTER TABLE users ADD COLUMN $c TEXT")
+        }
+        listOf("middle_name", "house_no", "street", "municipality", "city").forEach { c ->
+            if (c !in userCols) exec("ALTER TABLE users ADD COLUMN $c TEXT NOT NULL DEFAULT ''")
+        }
+        if ("deleted_at" !in userCols) exec("ALTER TABLE users ADD COLUMN deleted_at TEXT")
+        val farmerCols = columns("farmers")
+        if ("capacity" !in farmerCols) exec("ALTER TABLE farmers ADD COLUMN capacity INTEGER NOT NULL DEFAULT 100")
+        if ("deleted_at" !in farmerCols) exec("ALTER TABLE farmers ADD COLUMN deleted_at TEXT")
+        listOf("tours", "fruit_picking", "products").forEach { t ->
+            val cols = columns(t)
+            if ("deleted_at" !in cols) exec("ALTER TABLE $t ADD COLUMN deleted_at TEXT")
+            if ("archived_before_delete" !in cols) exec("ALTER TABLE $t ADD COLUMN archived_before_delete INTEGER NOT NULL DEFAULT 0")
+        }
+        exec("UPDATE farmers SET capacity=100 WHERE capacity IS NULL OR capacity < 1")
+        backfillSplitNamesAndAddresses()
+
         exec("UPDATE users SET farmer_id=1 WHERE farmer_id IS NULL AND lower(email)=lower(?)", Role.FARMER.email)
         assignFarmOwnership()
         linkOrderItems()
@@ -296,6 +362,49 @@ class Database(
         if (tableExists("favorites")) {
             exec("INSERT OR IGNORE INTO user_favorites (user_email, item_id) SELECT ?, item_id FROM favorites", owner)
             exec("DROP TABLE favorites")
+        }
+
+        // ---- v2 gallery import runs after image URLs are localised ----
+        importLegacyGalleryImages()
+        setSetting(MIGRATION_V2_MARKER, "complete")
+    }
+
+    /** Splits legacy full names/addresses into the new required components without losing the originals. */
+    private fun backfillSplitNamesAndAddresses() {
+        query("SELECT id, full_name, address FROM users WHERE first_name IS NULL OR first_name=''") { r ->
+            Triple(r.getLong(1), r.str("full_name").orEmpty(), r.str("address").orEmpty())
+        }.forEach { (id, name, address) ->
+            val parts = name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val first = parts.firstOrNull().orEmpty()
+            val last = if (parts.size > 1) parts.last() else ""
+            val middle = if (parts.size > 2) parts.drop(1).dropLast(1).joinToString(" ") else ""
+            val addr = address.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val house = addr.getOrNull(0).orEmpty()
+            val street = addr.getOrNull(1).orEmpty()
+            val municipality = addr.getOrNull(2).orEmpty()
+            val city = addr.getOrNull(3) ?: addr.getOrNull(2).orEmpty()
+            exec("UPDATE users SET first_name=?, middle_name=?, last_name=?, house_no=?, street=?, municipality=?, city=? WHERE id=?",
+                first, middle, last, house, street, municipality, city, id)
+        }
+    }
+
+    /** Seeds the multi-image table from galleries already stored in the legacy columns. */
+    private fun importLegacyGalleryImages() {
+        tours().forEach { t ->
+            if (query("SELECT 1 FROM listing_images WHERE owner_type='tour' AND owner_id=? LIMIT 1", t.id) { 1 }.isEmpty()) {
+                val urls = (listOf(t.imageUrl) + t.thumbnails).filter { it.isNotBlank() }.distinct().take(5)
+                urls.forEachIndexed { i, url -> insertListingImage("tour", t.id.toLong(), url, i, i == 0) }
+            }
+        }
+        fruitPicking().forEach { f ->
+            if (query("SELECT 1 FROM listing_images WHERE owner_type='orchard' AND owner_id=? LIMIT 1", f.id) { 1 }.isEmpty()) {
+                val urls = (listOf(f.imageUrl) + f.thumbnails).filter { it.isNotBlank() }.distinct().take(5)
+                urls.forEachIndexed { i, url -> insertListingImage("orchard", f.id.toLong(), url, i, i == 0) }
+            }
+        }
+        products().forEach { p ->
+            if (query("SELECT 1 FROM listing_images WHERE owner_type='product' AND owner_id=? LIMIT 1", p.id) { 1 }.isEmpty()
+                && p.imageUrl.isNotBlank()) insertListingImage("product", p.id, p.imageUrl, 0, true)
         }
     }
 
@@ -630,15 +739,19 @@ class Database(
     fun minSort(table: String): Int =
         conn.createStatement().use { it.executeQuery("SELECT COALESCE(MIN(sort_order),0) FROM $table").use { r -> r.next(); r.getInt(1) } }
 
-    private val fileReference = Regex("file:[^\\s\"',]+")
+    /** Stops at JSON/SQL quoting characters but keeps spaces used by legacy uploaded filenames. */
+    private val fileReference = Regex("file:[^\"'\\]\\[,]+")
 
     private fun fileRefsIn(sql: String, vararg args: Any?): Set<String> =
         query(sql, *args) { r ->
             (1..r.metaData.columnCount).joinToString(" ") { r.getString(it).orEmpty() }
-        }.flatMap { row -> fileReference.findAll(row).map { it.value }.toList() }.toSet()
+        }.flatMap { row -> fileReference.findAll(row).map { it.value.trim() }.toList() }.toSet()
 
-    /** Deletes uploaded images that no remaining row (including historical orders) still uses. */
-    private fun deleteUnreferencedUploads(candidates: Set<String>) {
+    /**
+     * Deletes uploaded images that no remaining row (including historical orders) still uses.
+     * Returns paths that could not be deleted so the caller can report an incomplete cleanup.
+     */
+    private fun deleteUnreferencedUploads(candidates: Set<String>): List<String> {
         val referenced = listOf(
             "SELECT photo_url, farm_banner_url, gallery FROM farmers",
             "SELECT image_url, thumbnails FROM tours",
@@ -648,23 +761,33 @@ class Database(
             "SELECT uploaded_receipt_url FROM orders",
             "SELECT product_image_url FROM order_items",
             "SELECT uploaded_id_doc, uploaded_receipt_doc FROM bookings",
+            "SELECT url FROM listing_images",
         ).flatMap(::fileRefsIn).toSet()
         val uploadRoot = File(file.absoluteFile.parentFile, "uploads").absolutePath
-        candidates.asSequence()
+        return candidates.asSequence()
             .filter { it.startsWith("file:") }
+            .filter { url ->
+                val path = url.removePrefix("file:")
+                path.startsWith(uploadRoot, ignoreCase = true) && url !in referenced
+            }
             .map { it.removePrefix("file:") }
-            .filter { it.startsWith(uploadRoot, ignoreCase = true) && it !in referenced }
-            .forEach { runCatching { File(it).delete() } }
+            .map(::File)
+            .filter(File::exists)
+            .mapNotNull { f -> if (f.delete() || !f.exists()) null else f.absolutePath }
+            .toList()
     }
 
     // ------------------------------------------------------------------ users
     private fun mapUser(r: ResultSet) = User(r.getLong("id"), r.str("full_name")!!, r.str("email")!!, r.str("phone") ?: "",
         Role.of(r.str("role")!!), r.getInt("farmer_id").takeIf { !r.wasNull() }, r.str("address") ?: "", r.str("avatar_url") ?: "",
-        r.getInt("is_active") == 1, r.str("created_at") ?: "")
+        r.getInt("is_active") == 1, r.str("created_at") ?: "",
+        r.str("first_name").orEmpty(), r.str("middle_name").orEmpty(), r.str("last_name").orEmpty(),
+        r.str("house_no").orEmpty(), r.str("street").orEmpty(), r.str("municipality").orEmpty(), r.str("city").orEmpty(),
+        r.str("deleted_at"))
 
     /** The account that manages a farm, if any. */
     fun farmerAccount(farmerId: Int): User? =
-        query("SELECT * FROM users WHERE farmer_id=? AND role='farmer' LIMIT 1", farmerId, map = ::mapUser).firstOrNull()
+        query("SELECT * FROM users WHERE farmer_id=? AND role='farmer' AND deleted_at IS NULL LIMIT 1", farmerId, map = ::mapUser).firstOrNull()
 
     /** Creates a farm profile for a newly registered farmer and links the account to it. */
     fun createFarm(userId: Long, ownerName: String, farmName: String, province: String, fallbackImage: String, bannerImage: String = fallbackImage): Int = tx {
@@ -677,9 +800,12 @@ class Database(
     }
 
     fun findUser(email: String): User? =
-        query("SELECT * FROM users WHERE lower(email)=lower(?)", email.trim(), map = ::mapUser).firstOrNull()
+        query("SELECT * FROM users WHERE lower(email)=lower(?) AND deleted_at IS NULL", email.trim(), map = ::mapUser).firstOrNull()
 
-    fun users(): List<User> = query("SELECT * FROM users ORDER BY role, lower(full_name), id", map = ::mapUser)
+    fun users(): List<User> = query("SELECT * FROM users WHERE deleted_at IS NULL ORDER BY role, lower(full_name), id", map = ::mapUser)
+
+    /** Includes soft-deleted accounts; only admin Trash Bin screens should use this. */
+    fun allUsers(): List<User> = query("SELECT * FROM users ORDER BY role, lower(full_name), id", map = ::mapUser)
 
     fun setUserActive(id: Long, active: Boolean) =
         exec("UPDATE users SET is_active=? WHERE id=?", active, id)
@@ -688,13 +814,27 @@ class Database(
         query("SELECT COUNT(*) FROM users WHERE role='admin' AND is_active=1") { it.getInt(1) }.first()
 
     /** Inserts a new account; returns null if the email is already registered. */
-    fun createUser(fullName: String, email: String, phone: String, password: String, role: String): User? {
+    fun createUser(
+        fullName: String, email: String, phone: String, password: String, role: String,
+        firstName: String = "", middleName: String = "", lastName: String = "",
+        houseNo: String = "", street: String = "", municipality: String = "", city: String = "",
+    ): User? {
         require(role == Role.USER.key || role == Role.FARMER.key) {
             "Administrator accounts must be configured by the system owner."
         }
         if (findUser(email) != null) return null
-        exec("INSERT INTO users (full_name, email, phone, password_hash, role) VALUES (?,?,?,?,?)",
-            fullName.trim(), email.trim(), phone.trim(), hashPassword(password), role)
+        val first = firstName.trim().ifBlank { fullName.trim().substringBefore(" ") }
+        val last = lastName.trim().ifBlank {
+            val parts = fullName.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (parts.size > 1) parts.last() else ""
+        }
+        val composed = listOf(first, middleName.trim(), last).filter { it.isNotBlank() }.joinToString(" ")
+            .ifBlank { fullName.trim() }
+        exec("""INSERT INTO users (full_name, email, phone, password_hash, role, first_name, middle_name, last_name,
+                house_no, street, municipality, city, address) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            composed, email.trim(), phone.trim(), hashPassword(password), role, first, middleName.trim(), last,
+            houseNo.trim(), street.trim(), municipality.trim(), city.trim(),
+            listOf(houseNo, street, municipality, city).filter { it.isNotBlank() }.joinToString(", "))
         return findUser(email)
     }
 
@@ -705,8 +845,36 @@ class Database(
         return user?.takeIf { it.isActive && verifyPassword(password, hash) }
     }
 
-    fun updateUserProfile(id: Long, fullName: String, phone: String) =
-        exec("UPDATE users SET full_name=?, phone=? WHERE id=?", fullName.trim(), phone.trim(), id)
+    fun updateUserProfile(
+        id: Long, fullName: String, phone: String,
+        firstName: String = "", middleName: String = "", lastName: String = "",
+        houseNo: String = "", street: String = "", municipality: String = "", city: String = "",
+    ) {
+        val first = firstName.trim().ifBlank { fullName.trim().substringBefore(" ") }
+        val last = lastName.trim().ifBlank {
+            val parts = fullName.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (parts.size > 1) parts.last() else ""
+        }
+        // Keep the supplied display name verbatim. Older callers pass a free-form name (e.g.
+        // "Ana R. Reyes") with no structured parts; rebuilding it from first/last would drop
+        // the middle initial. Structured forms already compose the same string before calling us.
+        val composed = fullName.trim().ifBlank {
+            listOf(first, middleName.trim(), last).filter { it.isNotBlank() }.joinToString(" ")
+        }
+        val hasAddress = listOf(houseNo, street, municipality, city).any { it.isNotBlank() }
+        val addressText = listOf(houseNo, street, municipality, city).filter { it.isNotBlank() }.joinToString(", ")
+        if (hasAddress) {
+            exec("""UPDATE users SET full_name=?, phone=?, first_name=?, middle_name=?, last_name=?,
+                    house_no=?, street=?, municipality=?, city=?, address=? WHERE id=?""",
+                composed, phone.trim(), first, middleName.trim(), last, houseNo.trim(), street.trim(),
+                municipality.trim(), city.trim(), addressText, id)
+        } else {
+            exec("""UPDATE users SET full_name=?, phone=?, first_name=?, middle_name=?, last_name=?,
+                    house_no=?, street=?, municipality=?, city=? WHERE id=?""",
+                composed, phone.trim(), first, middleName.trim(), last, houseNo.trim(), street.trim(),
+                municipality.trim(), city.trim(), id)
+        }
+    }
 
     fun updateUserAvatar(id: Long, url: String) = exec("UPDATE users SET avatar_url=? WHERE id=?", url, id)
 
@@ -734,7 +902,7 @@ class Database(
         true
     }
 
-    fun userCount(): Int = count("users")
+    fun userCount(): Int = query("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL") { it.getInt(1) }.first()
 
     /** Deletes a tourist account while keeping its historical bookings and orders intact. */
     fun deleteTouristAccount(userId: Long): Boolean = tx {
@@ -747,53 +915,211 @@ class Database(
         true
     }
 
-    /**
-     * Deletes a farmer account and its active farm data in one transaction. Listings are archived
-     * instead of removed so historical bookings, orders and payments keep their linked farm;
-     * guides, schedule slots, reviews and stale cart/favorite references are removed. Uploaded
-     * media is deleted only when no remaining row (including an order item) still references it.
-     */
-    fun deleteFarmerAccount(userId: Long): Boolean = tx {
-        val user = query("SELECT * FROM users WHERE id=?", userId, map = ::mapUser).firstOrNull() ?: return@tx false
-        if (user.role != Role.FARMER) return@tx false
-        val uploads = mutableSetOf<String>()
-        user.farmerId?.let { farmerId ->
-            val tourIds = query("SELECT id FROM tours WHERE farmer_id=?", farmerId) { it.getInt(1) }
-            val orchardIds = query("SELECT id FROM fruit_picking WHERE farmer_id=?", farmerId) { it.getInt(1) }
-            val productIds = query("SELECT id FROM products WHERE farmer_id=?", farmerId) { it.getLong(1) }
+    fun userById(id: Long): User? =
+        query("SELECT * FROM users WHERE id=?", id, map = ::mapUser).firstOrNull()
 
-            uploads += fileRefsIn("SELECT photo_url, farm_banner_url, gallery FROM farmers WHERE id=?", farmerId)
-            uploads += fileRefsIn("SELECT image_url, thumbnails FROM tours WHERE farmer_id=?", farmerId)
-            uploads += fileRefsIn("SELECT image_url, thumbnails FROM fruit_picking WHERE farmer_id=?", farmerId)
-            uploads += fileRefsIn("SELECT image_url FROM products WHERE farmer_id=?", farmerId)
-
-            // Keep the rows for history but hide them from the marketplace and clear their media.
-            exec("UPDATE tours SET archived=1, image_url='', thumbnails='[]' WHERE farmer_id=?", farmerId)
-            exec("UPDATE fruit_picking SET archived=1, image_url='', thumbnails='[]' WHERE farmer_id=?", farmerId)
-            exec("UPDATE products SET archived=1, image_url='' WHERE farmer_id=?", farmerId)
-
-            tourIds.forEach {
-                exec("DELETE FROM time_slots WHERE activity_type='tour' AND activity_id=?", it)
-                exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong())
-                exec("DELETE FROM reviews WHERE target_type='tour' AND target_id=?", it)
-            }
-            orchardIds.forEach {
-                exec("DELETE FROM time_slots WHERE activity_type='orchard' AND activity_id=?", it)
-                exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong() + 100)
-                exec("DELETE FROM reviews WHERE target_type='orchard' AND target_id=?", it)
-            }
-            productIds.forEach { exec("DELETE FROM user_cart WHERE product_id=?", it) }
-
-            exec("DELETE FROM guides WHERE farmer_id=?", farmerId)
-            exec("DELETE FROM farmers WHERE id=?", farmerId)
+    // -------------------------------------------------------------- listing images (max 5 each)
+    fun listingImages(ownerType: String, ownerId: Long, includeDeleted: Boolean = false): List<ListingImage> =
+        query("SELECT * FROM listing_images WHERE owner_type=? AND owner_id=? ${if (includeDeleted) "" else "AND deleted_at IS NULL"} ORDER BY sort_order, id",
+            ownerType, ownerId) { r ->
+            ListingImage(r.getLong("id"), ownerType, ownerId, r.str("url")!!, r.getInt("sort_order"),
+                r.getInt("is_cover") == 1, r.str("deleted_at"))
         }
-        uploads += fileRefsIn("SELECT avatar_url FROM users WHERE id=?", userId)
-        exec("DELETE FROM notifications WHERE recipient_email=?", user.email)
-        exec("DELETE FROM user_cart WHERE user_email=?", user.email)
-        exec("DELETE FROM user_favorites WHERE user_email=?", user.email)
-        exec("DELETE FROM users WHERE id=?", userId)
-        deleteUnreferencedUploads(uploads)
+
+    internal fun insertListingImage(type: String, ownerId: Long, url: String, order: Int, cover: Boolean) =
+        exec("INSERT INTO listing_images (owner_type, owner_id, url, sort_order, is_cover) VALUES (?,?,?,?,?)",
+            type, ownerId, url, order, cover)
+
+    /** Replaces the gallery in place: unchanged URLs keep their original row ids and cover state. */
+    fun replaceListingImages(type: String, ownerId: Long, urls: List<String>, coverIndex: Int = 0) = tx {
+        require(type in setOf("tour", "orchard", "product", "farmer_photo", "farm_cover", "farmer_gallery")) {
+            "Unsupported image owner: $type"
+        }
+        require(urls.size <= MAX_IMAGES_PER_LISTING) { "A listing can have at most $MAX_IMAGES_PER_LISTING images." }
+        val desired = urls.filter { it.isNotBlank() }.distinct().take(MAX_IMAGES_PER_LISTING)
+        val existing = listingImages(type, ownerId, includeDeleted = true)
+        val reused = mutableSetOf<Long>()
+        desired.forEachIndexed { index, url ->
+            val match = existing.firstOrNull { it.url == url && it.id !in reused }
+            if (match != null) {
+                reused += match.id
+                exec("UPDATE listing_images SET sort_order=?, is_cover=?, deleted_at=NULL WHERE id=?", index, index == coverIndex, match.id)
+            } else insertListingImage(type, ownerId, url, index, index == coverIndex)
+        }
+        existing.filter { it.id !in reused }.forEach { exec("DELETE FROM listing_images WHERE id=?", it.id) }
+        val cover = desired.getOrNull(coverIndex).orEmpty()
+        val gallery = desired.filterIndexed { i, _ -> i != coverIndex }
+        when (type) {
+            "tour" -> exec("UPDATE tours SET image_url=?, thumbnails=? WHERE id=?", cover, gallery.enc(), ownerId)
+            "orchard" -> exec("UPDATE fruit_picking SET image_url=?, thumbnails=? WHERE id=?", cover, gallery.enc(), ownerId)
+            "product" -> exec("UPDATE products SET image_url=? WHERE id=?", cover, ownerId)
+            "farmer_photo" -> exec("UPDATE farmers SET photo_url=? WHERE id=?", cover, ownerId)
+            "farm_cover" -> exec("UPDATE farmers SET farm_banner_url=? WHERE id=?", cover, ownerId)
+            "farmer_gallery" -> exec("UPDATE farmers SET gallery=? WHERE id=?", gallery.enc(), ownerId)
+        }
+        listingImages(type, ownerId)
+    }
+
+    // ------------------------------------------------------------------ farm capacity
+    fun farmCapacity(farmerId: Int?): Int =
+        if (farmerId == null) DEFAULT_FARM_CAPACITY
+        else query("SELECT capacity FROM farmers WHERE id=?", farmerId) { it.getInt(1) }.firstOrNull() ?: DEFAULT_FARM_CAPACITY
+
+    /** Pax held by every active (non-cancelled) tour/orchard booking belonging to a farm. */
+    fun confirmedPaxForFarm(farmerId: Int?): Int {
+        if (farmerId == null) return 0
+        val tourIds = query("SELECT id FROM tours WHERE farmer_id=?", farmerId) { it.getInt(1) }
+        val orchardIds = query("SELECT id FROM fruit_picking WHERE farmer_id=?", farmerId) { it.getInt(1) }
+        if (tourIds.isEmpty() && orchardIds.isEmpty()) return 0
+        return bookings().filter {
+            it.status != "Cancelled" &&
+                (if (it.activityType == "orchard") it.farmId in orchardIds else it.farmId in tourIds)
+        }.sumOf { it.participants.coerceAtLeast(0) }
+    }
+
+    /** Remaining pax a new booking may use for this farm. */
+    fun availablePaxForFarm(farmerId: Int?): Int = farmCapacity(farmerId) - confirmedPaxForFarm(farmerId)
+
+    /** A farm's capacity can never be set below the pax it has already confirmed. */
+    fun setFarmCapacity(farmerId: Int, capacity: Int) = tx {
+        require(capacity > 0) { "Capacity must be a positive whole number." }
+        val used = confirmedPaxForFarm(farmerId)
+        require(capacity >= used) { "Capacity cannot be lower than the $used confirmed pax." }
+        exec("UPDATE farmers SET capacity=? WHERE id=?", capacity, farmerId)
+    }
+
+    // -------------------------------------------------------- farmer trash bin (reversible delete)
+    /** Moves a farmer and every linked listing/image to Trash without deleting any record. */
+    fun softDeleteFarmerAccount(userId: Long): Boolean = tx {
+        val user = userById(userId) ?: return@tx false
+        if (user.role != Role.FARMER || user.deletedAt != null) return@tx false
+        val now = java.time.Instant.now().toString()
+        exec("UPDATE users SET deleted_at=? WHERE id=?", now, userId)
+        val farmerId = user.farmerId ?: return@tx true
+        exec("UPDATE farmers SET deleted_at=? WHERE id=?", now, farmerId)
+        listOf("tours", "fruit_picking", "products").forEach { table ->
+            exec("UPDATE $table SET archived_before_delete=archived, archived=1, deleted_at=? WHERE farmer_id=? AND deleted_at IS NULL", now, farmerId)
+        }
+        exec("""UPDATE listing_images SET deleted_at=? WHERE owner_type IN ('tour','orchard','product','farmer_photo','farm_cover','farmer_gallery')
+            AND (owner_id=? OR owner_id IN (SELECT id FROM tours WHERE farmer_id=?)
+            OR owner_id IN (SELECT id FROM fruit_picking WHERE farmer_id=?)
+            OR owner_id IN (SELECT id FROM products WHERE farmer_id=?))""",
+            now, farmerId, farmerId, farmerId, farmerId)
         true
+    }
+
+    /** Restores every original row and id; nothing is duplicated or recreated. */
+    fun restoreFarmerAccount(userId: Long): Boolean = tx {
+        val user = userById(userId) ?: return@tx false
+        if (user.role != Role.FARMER || user.deletedAt == null) return@tx false
+        exec("UPDATE users SET deleted_at=NULL WHERE id=?", userId)
+        val farmerId = user.farmerId ?: return@tx true
+        exec("UPDATE farmers SET deleted_at=NULL WHERE id=?", farmerId)
+        listOf("tours", "fruit_picking", "products").forEach { table ->
+            exec("UPDATE $table SET archived=archived_before_delete, deleted_at=NULL, archived_before_delete=0 WHERE farmer_id=? AND deleted_at IS NOT NULL", farmerId)
+        }
+        exec("""UPDATE listing_images SET deleted_at=NULL WHERE owner_type IN ('tour','orchard','product','farmer_photo','farm_cover','farmer_gallery')
+            AND (owner_id=? OR owner_id IN (SELECT id FROM tours WHERE farmer_id=?)
+            OR owner_id IN (SELECT id FROM fruit_picking WHERE farmer_id=?)
+            OR owner_id IN (SELECT id FROM products WHERE farmer_id=?))""",
+            farmerId, farmerId, farmerId, farmerId)
+        true
+    }
+
+    /**
+     * Admin-facing delete: permanently removes the farmer account and every record it owns.
+     * The Trash Bin remains available for accounts that were moved there by the older flow.
+     */
+    fun deleteFarmerAccount(userId: Long): Boolean = deleteFarmerAccountCascade(userId).accountDeleted
+
+    fun deletedFarmers(): List<TrashFarmer> =
+        query("SELECT * FROM users WHERE role='farmer' AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id", map = ::mapUser).map { user ->
+            val farmerId = user.farmerId
+            val farm = farmerId?.let { id -> allFarmers().firstOrNull { it.id == id } }
+            val tours = if (farmerId == null) emptyList() else tours().filter { it.farmerId == farmerId }
+            val orchards = if (farmerId == null) emptyList() else fruitPicking().filter { it.farmerId == farmerId }
+            val products = if (farmerId == null) emptyList() else products().filter { it.farmerId == farmerId }
+            val images = buildList {
+                if (farmerId != null) {
+                    addAll(listingImages("farmer_photo", farmerId.toLong(), includeDeleted = true))
+                    addAll(listingImages("farm_cover", farmerId.toLong(), includeDeleted = true))
+                }
+                tours.forEach { addAll(listingImages("tour", it.id.toLong(), includeDeleted = true)) }
+                orchards.forEach { addAll(listingImages("orchard", it.id.toLong(), includeDeleted = true)) }
+                products.forEach { addAll(listingImages("product", it.id, includeDeleted = true)) }
+            }
+            TrashFarmer(user, farm, tours, orchards, products, images, user.deletedAt!!)
+        }
+
+    /**
+     * Removes the farmer, its farm profile, every listing it owns and every dependent record in one
+     * transaction. Uploaded files are cleaned up only after the commit, and only when no remaining
+     * row (including another farmer's listing or a historical order) still references them.
+     * Bookings and orders stay as historical transaction records.
+     */
+    fun deleteFarmerAccountCascade(userId: Long): FarmerDeletionResult {
+        val uploads = mutableSetOf<String>()
+        val deleted = tx {
+            val user = userById(userId) ?: return@tx false
+            if (user.role != Role.FARMER) return@tx false
+            user.farmerId?.let { farmerId ->
+                val tourIds = query("SELECT id FROM tours WHERE farmer_id=?", farmerId) { it.getInt(1) }
+                val orchardIds = query("SELECT id FROM fruit_picking WHERE farmer_id=?", farmerId) { it.getInt(1) }
+                val productIds = query("SELECT id FROM products WHERE farmer_id=?", farmerId) { it.getLong(1) }
+
+                // Collect every file URL before any row disappears so the cleanup can be exact.
+                uploads += fileRefsIn("SELECT photo_url, farm_banner_url, gallery FROM farmers WHERE id=?", farmerId)
+                uploads += fileRefsIn("SELECT image_url, thumbnails FROM tours WHERE farmer_id=?", farmerId)
+                uploads += fileRefsIn("SELECT image_url, thumbnails FROM fruit_picking WHERE farmer_id=?", farmerId)
+                uploads += fileRefsIn("SELECT image_url FROM products WHERE farmer_id=?", farmerId)
+                uploads += listingImages("farmer_photo", farmerId.toLong(), true).map { it.url }
+                uploads += listingImages("farm_cover", farmerId.toLong(), true).map { it.url }
+                uploads += listingImages("farmer_gallery", farmerId.toLong(), true).map { it.url }
+                tourIds.forEach { uploads += listingImages("tour", it.toLong(), true).map { img -> img.url } }
+                orchardIds.forEach { uploads += listingImages("orchard", it.toLong(), true).map { img -> img.url } }
+                productIds.forEach { uploads += listingImages("product", it, true).map { img -> img.url } }
+
+                exec("DELETE FROM listing_images WHERE owner_id=? AND owner_type IN ('farmer_photo','farm_cover','farmer_gallery')", farmerId)
+                tourIds.forEach { exec("DELETE FROM listing_images WHERE owner_type='tour' AND owner_id=?", it) }
+                orchardIds.forEach { exec("DELETE FROM listing_images WHERE owner_type='orchard' AND owner_id=?", it) }
+                productIds.forEach { exec("DELETE FROM listing_images WHERE owner_type='product' AND owner_id=?", it) }
+
+                // Listings themselves are removed; bookings/orders remain as historical records.
+                exec("DELETE FROM tours WHERE farmer_id=?", farmerId)
+                exec("DELETE FROM fruit_picking WHERE farmer_id=?", farmerId)
+                exec("DELETE FROM products WHERE farmer_id=?", farmerId)
+
+                tourIds.forEach {
+                    exec("DELETE FROM time_slots WHERE activity_type='tour' AND activity_id=?", it)
+                    exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong())
+                    exec("DELETE FROM reviews WHERE target_type='tour' AND target_id=?", it)
+                }
+                orchardIds.forEach {
+                    exec("DELETE FROM time_slots WHERE activity_type='orchard' AND activity_id=?", it)
+                    exec("DELETE FROM user_favorites WHERE item_id=?", it.toLong() + 100)
+                    exec("DELETE FROM reviews WHERE target_type='orchard' AND target_id=?", it)
+                }
+                productIds.forEach { exec("DELETE FROM user_cart WHERE product_id=?", it) }
+
+                exec("DELETE FROM guides WHERE farmer_id=?", farmerId)
+                exec("DELETE FROM farmers WHERE id=?", farmerId)
+            }
+            uploads += fileRefsIn("SELECT avatar_url FROM users WHERE id=?", userId)
+            exec("DELETE FROM notifications WHERE recipient_email=?", user.email)
+            exec("DELETE FROM user_cart WHERE user_email=?", user.email)
+            exec("DELETE FROM user_favorites WHERE user_email=?", user.email)
+            exec("DELETE FROM users WHERE id=?", userId)
+            true
+        }
+        if (!deleted) return FarmerDeletionResult(false)
+        return FarmerDeletionResult(true, deleteUnreferencedUploads(uploads))
+    }
+
+    /** Trash Bin action: only an account already in Trash can be emptied permanently. */
+    fun permanentlyDeleteFarmerAccount(userId: Long): Boolean {
+        val user = userById(userId) ?: return false
+        if (user.role != Role.FARMER || user.deletedAt == null) return false
+        return deleteFarmerAccountCascade(userId).accountDeleted
     }
 
     // ------------------------------------------------------------------ farmers / tours / fruit
@@ -801,11 +1127,11 @@ class Database(
         insertSql("farmers", listOf("id", "name", "role_title", "farm_name", "location", "province", "years_experience",
             "photo_url", "farm_banner_url", "story_quote", "full_biography", "farming_philosophy", "certifications",
             "sustainable_practices", "specialty_produce", "product_ids", "tour_id", "rating", "reviews_count",
-            "generation", "hectares", "gallery")),
+            "generation", "hectares", "gallery", "capacity", "deleted_at")),
         f.id, f.name, f.roleTitle, f.farmName, f.location, f.province, f.yearsExperience, f.photoUrl, f.farmBannerUrl,
         f.storyQuote, f.fullBiography, f.farmingPhilosophy, f.certifications.enc(), f.sustainablePractices.enc(),
         f.specialtyProduce.enc(), json.encodeToString(longList, f.productIds), f.tourId, f.rating, f.reviewsCount,
-        f.generation, f.hectares, f.gallery.enc(),
+        f.generation, f.hectares, f.gallery.enc(), f.capacity.coerceAtLeast(1), f.deletedAt,
     )
 
     fun updateFarmerPhoto(id: Int, url: String) = exec("UPDATE farmers SET photo_url=? WHERE id=?", url, id)
@@ -866,7 +1192,9 @@ class Database(
         }
     }
 
-    fun farmers(): List<FarmerProfile> = query("SELECT * FROM farmers ORDER BY id") { r ->
+    private fun farmerRows(includeDeleted: Boolean = false): List<FarmerProfile> = query(
+        "SELECT * FROM farmers ${if (includeDeleted) "" else "WHERE deleted_at IS NULL"} ORDER BY id"
+    ) { r ->
         FarmerProfile(
             r.getInt("id"), r.str("name")!!, r.str("role_title")!!, r.str("farm_name")!!, r.str("location")!!,
             r.str("province")!!, r.getInt("years_experience"), r.str("photo_url")!!, r.str("farm_banner_url")!!,
@@ -875,8 +1203,14 @@ class Database(
             r.str("specialty_produce")!!.decList(), json.decodeFromString(longList, r.str("product_ids")!!),
             r.getInt("tour_id"), r.getDouble("rating"), r.getInt("reviews_count"), r.str("generation")!!,
             r.str("hectares")!!, r.str("gallery")!!.decList(),
+            r.getInt("capacity").takeIf { !r.wasNull() } ?: Database.DEFAULT_FARM_CAPACITY, r.str("deleted_at"),
         )
     }
+
+    fun farmers(): List<FarmerProfile> = farmerRows(false)
+
+    /** Includes farmers in the Trash Bin; only admin screens should use this. */
+    fun allFarmers(): List<FarmerProfile> = farmerRows(true)
 
     private fun saveTour(t: FarmTour) = exec(
         insertSql("tours", listOf("id", "name", "location", "rating", "reviews_count", "price_per_person",
@@ -982,6 +1316,13 @@ class Database(
     class InvalidBookingDateException : RuntimeException("Choose a booking date from today through December 31 of next year.")
     class InvalidBookingPaymentMethodException : RuntimeException("Farm bookings must use Pay at the Farm.")
     class InvalidTourPriceException : RuntimeException("This tour has an invalid price.")
+    class CapacityExceededException(message: String) : RuntimeException(message)
+
+    private fun farmerIdForBooking(b: Booking): Int? = when (b.activityType) {
+        "tour" -> tours().firstOrNull { it.id == b.farmId }?.farmerId
+        "orchard" -> fruitPicking().firstOrNull { it.id == b.farmId }?.farmerId
+        else -> null
+    }
 
     fun bookingScheduleError(activityType: String, activityId: Int, label: String): String? {
         val slots = timeSlots()
@@ -1019,17 +1360,34 @@ class Database(
 
     fun saveBooking(b: Booking, sortOrder: Int? = null, validateSchedule: Boolean = true) {
         if (b.paymentMethod != PAY_AT_FARM_PAYMENT_METHOD) throw InvalidBookingPaymentMethodException()
+        if (b.participants < 1) throw IllegalArgumentException("Number of persons (pax) must be a positive whole number.")
         val existingDate = query("SELECT tour_date FROM bookings WHERE id=? AND booking_code=?", b.id, b.bookingCode) { it.getString(1) }.firstOrNull()
         val existingBooking = existingDate != null
+        if (b.status != "Cancelled") {
+            val farmerId = farmerIdForBooking(b)
+            val previous = if (existingBooking) bookings().firstOrNull { it.id == b.id } else null
+            val ownPax = if (previous != null && previous.status != "Cancelled" && farmerIdForBooking(previous) == farmerId) previous.participants else 0
+            val capacity = farmCapacity(farmerId)
+            val available = capacity - (confirmedPaxForFarm(farmerId) - ownPax)
+            if (available < b.participants) {
+                throw CapacityExceededException("Only $available slot(s) are available for this farm. Reduce the number of persons.")
+            }
+        }
         if (validateSchedule && (!existingBooking || existingDate != b.tourDate)) {
             val date = runCatching { LocalDate.parse(b.tourDate) }.getOrNull()
             if (date == null || !BookingDateWindow.current().contains(date)) throw InvalidBookingDateException()
         }
-        if (b.activityType == "tour") {
-            val tour = tours().firstOrNull { it.id == b.farmId && (existingBooking || !it.archived) }
-                ?: throw InvalidBookingScheduleException("This tour is unavailable.")
-            if (!existingBooking && !tour.bookingEnabled) throw InvalidBookingScheduleException("Bookings for this tour are currently unavailable.")
-            if (tour.pricePerPerson < 0) throw InvalidTourPriceException()
+        when (b.activityType) {
+            "tour" -> {
+                val tour = tours().firstOrNull { it.id == b.farmId && (existingBooking || !it.archived) }
+                    ?: throw InvalidBookingScheduleException("This tour is unavailable.")
+                if (!existingBooking && !tour.bookingEnabled) throw InvalidBookingScheduleException("Bookings for this tour are currently unavailable.")
+                if (tour.pricePerPerson < 0) throw InvalidTourPriceException()
+            }
+            "orchard" -> {
+                val orchard = fruitPicking().firstOrNull { it.id == b.farmId && (existingBooking || !it.archived) }
+                    ?: throw InvalidBookingScheduleException("This fruit-picking experience is unavailable.")
+            }
         }
         if (validateSchedule) bookingScheduleError(b)?.let { throw InvalidBookingScheduleException(it) }
         conflictingBooking(b)?.let { throw DoubleBookingException(it) }

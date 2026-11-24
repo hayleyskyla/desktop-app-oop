@@ -46,6 +46,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import ph.agritourism.model.AvailabilityStatus
 
 object Palette {
     val Forest = Color(0xFF1E562F)
@@ -237,10 +239,51 @@ fun TextAction(text: String, modifier: Modifier = Modifier, color: Color = Palet
     )
 }
 
+/** Set while a native image chooser is open so focus loss cannot dismiss the editor behind it. */
+object ModalDismissGuard {
+    var suppressed: Boolean = false
+}
+
+/** Back action with an arrow icon; keeps the label for clarity and accessibility. */
+@Composable
+fun BackAction(modifier: Modifier = Modifier, color: Color = Palette.Forest, onClick: () -> Unit) {
+    Row(modifier.handCursor().clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", Modifier.size(17.dp), tint = color)
+        Spacer(Modifier.width(6.dp))
+        Text("Back", color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    }
+}
+
+/** X close action. [showLabel] keeps the word Close in wide footers; compact headers use the icon only. */
+@Composable
+fun CloseAction(modifier: Modifier = Modifier, color: Color = Palette.Forest, showLabel: Boolean = true, onClick: () -> Unit) {
+    Row(modifier.handCursor().clickable(onClick = onClick).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.Close, "Close", Modifier.size(17.dp), tint = color)
+        if (showLabel) {
+            Spacer(Modifier.width(6.dp))
+            Text("Close", color = color, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+    }
+}
+
 @Composable
 fun Pill(text: String, bg: Color = Palette.Mint, fg: Color = Palette.Deep, modifier: Modifier = Modifier) {
     Text(text, modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 4.dp),
         fontSize = 11.sp, fontWeight = FontWeight.Bold, color = fg, maxLines = 1)
+}
+
+/** Compact status badge used on tour/orchard cards, booking forms and admin tables. */
+@Composable
+fun AvailabilityPill(status: AvailabilityStatus, remaining: Int? = null, capacity: Int? = null, modifier: Modifier = Modifier) {
+    val (bg, fg) = when (status) {
+        AvailabilityStatus.AVAILABLE -> Color(0xFFDCFCE7) to Color(0xFF166534)
+        AvailabilityStatus.LIMITED -> Color(0xFFFEF3C7) to Color(0xFF92400E)
+        AvailabilityStatus.FULL -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
+        AvailabilityStatus.UNAVAILABLE -> Color(0xFFE2E8F0) to Color(0xFF475569)
+    }
+    val label = if (remaining != null && capacity != null && status != AvailabilityStatus.UNAVAILABLE)
+        "${status.label} · $remaining/$capacity pax" else status.label
+    Pill(label, bg, fg, modifier)
 }
 
 @Composable
@@ -465,7 +508,7 @@ fun ChoiceRow(options: List<String>, selected: String, onSelect: (String) -> Uni
 
 @Composable
 fun Modal(onDismiss: () -> Unit, width: Dp = 640.dp, content: @Composable ColumnScope.() -> Unit) {
-    Dialog(onDismiss, DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog({ if (!ModalDismissGuard.suppressed) onDismiss() }, DialogProperties(usePlatformDefaultWidth = false)) {
         var shown by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { shown = true }
         val a by animateFloatAsState(if (shown) 1f else 0f, tween(220, easing = FastOutSlowInEasing), label = "modal-a")
@@ -484,7 +527,7 @@ fun ModalHeader(title: String, subtitle: String? = null, icon: ImageVector? = nu
             if (subtitle != null) Text(subtitle.uppercase(), color = Color(0xFF86EFAC), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
             Text(title, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold)
         }
-        TextAction("Close", color = Color.White, onClick = onClose)
+        CloseAction(color = Color.White, showLabel = false, onClick = onClose)
     }
 }
 
@@ -544,12 +587,15 @@ fun RatingText(rating: Double, count: Int) = Row(verticalAlignment = Alignment.C
 
 @Composable
 fun PhotoCard(image: String, title: String, locationTag: String, rating: Double, reviews: Int, price: Int, favorited: Boolean,
-              onFavorite: () -> Unit, onClick: () -> Unit, priceLabel: String? = null) {
+              onFavorite: () -> Unit, onClick: () -> Unit, priceLabel: String? = null, availability: AvailabilityStatus? = null) {
     GlassCard(padding = 0.dp, onClick = onClick) {
         Box(Modifier.fillMaxWidth().height(200.dp)) {
             AsyncImage(image, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to Color(0x55000000))))
-            Pill(locationTag, Color.White.copy(alpha = 0.92f), Palette.Deep, Modifier.align(Alignment.TopStart).padding(12.dp))
+            Column(Modifier.align(Alignment.TopStart).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill(locationTag, Color.White.copy(alpha = 0.92f), Palette.Deep)
+                if (availability != null) AvailabilityPill(availability)
+            }
             val heart by animateFloatAsState(if (favorited) 1f else 0.85f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium), label = "heart")
             IconButton(onFavorite, Modifier.handCursor().align(Alignment.TopEnd).padding(8.dp).size(36.dp).graphicsLayer { scaleX = heart + 0.15f; scaleY = heart + 0.15f }.clip(CircleShape).background(Color.White.copy(alpha = 0.9f))) {
                 Icon(if (favorited) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Save to favorites", tint = Color(0xFFEF4444))

@@ -2,7 +2,9 @@ package ph.agritourism
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -14,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runComposeUiTest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +30,13 @@ import ph.agritourism.ui.screens.LoginPage
 import ph.agritourism.ui.*
 import java.io.File
 import kotlin.test.*
+
+/** Invokes a button's onClick semantics action without scroll animation (manual clock safe). */
+private fun SemanticsNodeInteraction.performOnClickAction() {
+    val action = fetchSemanticsNode().config[SemanticsActions.OnClick]?.action
+        ?: fail("Expected an OnClick action on this node")
+    action()
+}
 
 /** Renders every page and overlay for every role headlessly to catch composition crashes. */
 @OptIn(ExperimentalTestApi::class)
@@ -213,21 +223,33 @@ class UiSmokeTest {
         onAllNodesWithText("Profile Information").assertCountEquals(1)
         onAllNodesWithText("Save Changes").assertCountEquals(1)
         val original = s.currentUser!!
-        onNodeWithTag("profile-name").performTextClearance()
-        onNodeWithTag("profile-name").performTextInput("Maria Updated")
-        onNodeWithTag("profile-phone").performTextClearance()
-        onNodeWithTag("profile-phone").performTextInput("0917 111 3333")
-        onNodeWithTag("profile-location").performTextClearance()
-        onNodeWithTag("profile-location").performTextInput("Cebu City")
-        onNodeWithText("Save Changes").performClick()
+        val expectedAddress = "Unit 1, Colon St, Cebu City, Cebu City"
+        onNodeWithTag("profile-first-name").performTextReplacement("Maria")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-last-name").performTextReplacement("Updated")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-phone").performTextReplacement("0917 111 3333")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-house-no").performTextReplacement("Unit 1")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-street").performTextReplacement("Colon St")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-municipality").performTextReplacement("Cebu City")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-city").performTextReplacement("Cebu City")
+        mainClock.advanceTimeBy(100)
+        onNodeWithText("Save Changes").performOnClickAction()
+        mainClock.advanceTimeBy(300)
         mainClock.advanceTimeBy(300)
 
         val saved = db.findUser(original.email)!!
         assertEquals("Maria Updated", saved.fullName)
+        assertEquals("Maria", saved.firstName)
+        assertEquals("Updated", saved.lastName)
         assertEquals("0917 111 3333", saved.phone)
-        assertEquals("Cebu City", saved.address)
+        assertEquals(expectedAddress, saved.address)
         assertEquals("Maria Updated", s.displayName)
-        assertEquals("Cebu City", s.currentUser!!.address)
+        assertEquals(expectedAddress, s.currentUser!!.address)
         assertFalse(s.isProfileModalOpen)
 
         onNodeWithTag("sidebar-logout").performClick()
@@ -274,11 +296,26 @@ class UiSmokeTest {
         mainClock.advanceTimeBy(300)
         onNodeWithTag("tourist-profile").performClick()
         mainClock.advanceTimeBy(300)
-        onNodeWithTag("profile-email").performTextClearance()
-        onNodeWithTag("profile-email").performTextInput(newEmail)
-        onNodeWithTag("profile-name").performTextClearance()
-        onNodeWithTag("profile-name").performTextInput("Ana Updated")
-        onNodeWithText("Save Changes").performClick()
+        val addressParts = s.currentUser!!.address.split(",").map { it.trim() }
+        val house = addressParts.getOrNull(0).orEmpty()
+        val street = addressParts.getOrNull(1).orEmpty()
+        val municipality = addressParts.getOrNull(2).orEmpty()
+        val city = addressParts.getOrNull(3) ?: municipality
+        onNodeWithTag("profile-email").performTextReplacement(newEmail)
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-first-name").performTextReplacement("Ana")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-last-name").performTextReplacement("Updated")
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-house-no").performTextReplacement(house)
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-street").performTextReplacement(street)
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-municipality").performTextReplacement(municipality)
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("profile-city").performTextReplacement(city)
+        mainClock.advanceTimeBy(100)
+        onNodeWithText("Save Changes").performOnClickAction()
         mainClock.advanceTimeBy(300)
 
         assertNull(db.findUser(originalEmail))
@@ -300,8 +337,10 @@ class UiSmokeTest {
         onNodeWithTag("tourist-profile").performClick()
         mainClock.advanceTimeBy(300)
         onNodeWithTag("profile-email").assertTextEquals(newEmail)
-        onNodeWithTag("profile-name").assertTextEquals("Ana Updated")
-        onNodeWithTag("profile-location").assertTextEquals(saved.address)
+        onNodeWithTag("profile-first-name").assertTextEquals("Ana")
+        onNodeWithTag("profile-last-name").assertTextEquals("Updated")
+        onNodeWithTag("profile-name").assertTextEquals("Full name: Ana Updated")
+        onNodeWithTag("profile-location").assertTextEquals("Address: ${saved.address}")
     }
 
     @Test fun adminManagementPagesShowOnlyTheirOwnTextTableColumns() = runComposeUiTest {
@@ -456,9 +495,9 @@ class UiSmokeTest {
         onAllNodesWithText("Description: ${product.description}").assertCountEquals(1)
         onAllNodesWithText("Farm Name: ${farm?.farmName ?: product.farmOrigin}").assertCountEquals(1)
         onAllNodesWithText("Back").assertCountEquals(1)
-        onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        onAllNodesWithContentDescription("Back").assertCountEquals(1)
         mainClock.advanceTimeBy(300) // let the modal entrance animation finish before clicking
-        onNodeWithText("Back").performClick()
+        onNodeWithContentDescription("Back").performClick()
         assertNull(s.selectedProductForView)
         assertEquals(Page.MARKET, s.activePage)
     }
@@ -473,6 +512,25 @@ class UiSmokeTest {
         onAllNodesWithText("Cancel").assertCountEquals(0)
         onAllNodesWithContentDescription("Delete booking from history").assertCountEquals(0)
         onAllNodesWithText("Gate Check-In").assertCountEquals(0)
+    }
+
+    @Test fun adminHeaderHasNoNotificationBell() = runComposeUiTest {
+        val s = AppState(db, scope).also { it.loginAs(Role.ADMIN) }
+        s.activePage = Page.DASHBOARD
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithContentDescription("Notification").assertCountEquals(0)
+        onAllNodesWithText("Platform Overview").assertCountEquals(1)
+        onNodeWithTag("global-search").assertExists()
+    }
+
+    @Test fun touristHeaderKeepsNotificationBell() = runComposeUiTest {
+        val s = AppState(db, scope).also { it.loginAs(Role.USER) }
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithContentDescription("Notification").assertCountEquals(1)
     }
 
     @Test fun farmerDeletionDialogShowsTheExactRequiredMessage() = runComposeUiTest {
@@ -520,8 +578,8 @@ class UiSmokeTest {
         onAllNodesWithText("Official Digital Tour Pass & E-Ticket").assertCountEquals(1)
         onAllNodesWithText("Save Ticket").assertCountEquals(1)
         onAllNodesWithText("Print Ticket").assertCountEquals(1)
-        onAllNodesWithText("Close").assertCountEquals(2) // modal header and bottom action are both text-only
-        onAllNodesWithContentDescription("Close").assertCountEquals(0)
+        onAllNodesWithText("Close").assertCountEquals(2) // modal header and bottom action
+        onAllNodesWithContentDescription("Close").assertCountEquals(2) // both are X icon actions
         onAllNodesWithText("AgriTourism QR Check-in").assertCountEquals(0)
     }
 
@@ -566,10 +624,10 @@ class UiSmokeTest {
         onAllNodesWithText("Cash on Delivery").assertCountEquals(1)
         onAllNodesWithText("View Order Details").assertCountEquals(1)
         assertTrue(onAllNodesWithText("Back").fetchSemanticsNodes().isNotEmpty())
-        onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        assertTrue(onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isNotEmpty())
     }
 
-    @Test fun loginPageUsesUpdatedLoginLabelAndTextOnlyBack() = runComposeUiTest {
+    @Test fun loginPageUsesUpdatedLoginLabelAndArrowBack() = runComposeUiTest {
         val s = AppState(db, scope).also { it.activePage = Page.LOGIN }
         mainClock.autoAdvance = false
         setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
@@ -577,7 +635,7 @@ class UiSmokeTest {
         onAllNodesWithText("Welcome Back").assertCountEquals(1)
         onAllNodesWithText("Log In").assertCountEquals(2)
         onAllNodesWithText("Back").assertCountEquals(1)
-        onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        onAllNodesWithContentDescription("Back").assertCountEquals(1)
         onNodeWithTag("back-to-opening").assertExists()
         onAllNodesWithText("Tip: press Enter to log in").assertCountEquals(0)
     }
@@ -588,7 +646,7 @@ class UiSmokeTest {
         setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
         onNodeWithTag("back-to-opening").assertExists()
         onAllNodesWithText("Back").assertCountEquals(1)
-        onAllNodesWithContentDescription("Back").assertCountEquals(0)
+        onAllNodesWithContentDescription("Back").assertCountEquals(1)
         onNodeWithTag("back-to-opening").performClick()
         mainClock.advanceTimeBy(100)
         assertEquals(Page.HOME, s.activePage)
@@ -598,4 +656,62 @@ class UiSmokeTest {
     @Test fun loginBackButtonReturnsToOpeningPage() = assertBackReturnsToOpening(Page.LOGIN)
 
     @Test fun signupBackButtonReturnsToOpeningPage() = assertBackReturnsToOpening(Page.SIGNUP)
+
+    @Test fun adminTrashBinShowsSoftDeletedFarmerAndRestoreActions() = runComposeUiTest {
+        val s = AppState(db, scope).also { it.loginAs(Role.ADMIN) }
+        val farmer = s.userAccounts.first { it.role == Role.FARMER && it.farmerId != null }
+        assertTrue(db.softDeleteFarmerAccount(farmer.id))
+        s.refreshFromDb()
+        s.activePage = Page.TRASH_BIN
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithText("Admin Trash Bin").assertCountEquals(1)
+        onAllNodesWithText("Soft-deleted farmer accounts are kept intact here until restored or permanently removed").assertCountEquals(1)
+        onNodeWithTag("trash-row-${farmer.id}").assertExists()
+        onAllNodesWithText("Restore").assertCountEquals(1)
+        onAllNodesWithText("Delete Permanently").assertCountEquals(1)
+    }
+
+    @Test fun farmerDashboardCapacityEditorCanSave() = runComposeUiTest {
+        val s = AppState(db, scope).also { it.loginAs(Role.FARMER) }
+        s.activePage = Page.DASHBOARD
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithText("Farm Capacity").assertCountEquals(1)
+        onAllNodesWithText("Save Capacity").assertCountEquals(1)
+        onNodeWithText("Save Capacity").performOnClickAction()
+        mainClock.advanceTimeBy(300)
+        assertTrue(s.toastMessage.orEmpty().contains("Farm capacity set"))
+    }
+
+    @Test fun tourBookingFormShowsPaxStepperAndAvailabilityBadge() = runComposeUiTest {
+        val s = AppState(db, scope)
+        val tour = s.tours.first { it.bookingEnabled }
+        s.selectedTour = tour
+        s.isTourModalOpen = true
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithText("Customize Your Tour Booking").assertCountEquals(1)
+        onAllNodesWithText("NUMBER OF PERSONS").assertCountEquals(1)
+        onAllNodesWithText("Pax", substring = true).assertCountEquals(1)
+        val remaining = s.availablePaxFor(tour)
+        val capacity = s.capacityFor(tour.farmerId)
+        val badge = "${s.availabilityFor(tour).label} · $remaining/$capacity pax"
+        onAllNodesWithText(badge).assertCountEquals(1)
+    }
+
+    @Test fun productEditorShowsFivePhotoGalleryAllowance() = runComposeUiTest {
+        val s = AppState(db, scope).also { it.loginAs(Role.FARMER) }
+        s.isAddProductModalOpen = true
+        mainClock.autoAdvance = false
+        setContent { MaterialTheme(colorScheme = AppColors) { AppShell(s) } }
+        mainClock.advanceTimeBy(300)
+        onAllNodesWithText("MORE PRODUCT PHOTOS").assertCountEquals(1)
+        onAllNodesWithText("0/4 photos").assertCountEquals(1) // one of five slots is the main product photo
+        onAllNodesWithTag("add-gallery-photos").assertCountEquals(1)
+        onAllNodesWithTag("gallery-count").assertCountEquals(1)
+    }
 }

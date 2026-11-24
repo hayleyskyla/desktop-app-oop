@@ -49,7 +49,7 @@ fun ExploreTours(s: AppState) {
     Grid(s.tours, 3) { t ->
         PhotoCard(t.imageUrl, t.name, t.location.substringBefore(","), t.rating, t.reviewsCount, t.pricePerPerson, t.id.toLong() in s.favoriteIds,
             { s.toggleFavorite(t.id.toLong(), t.name) }, { s.selectedTour = t; s.isTourModalOpen = true },
-            if (t.bookingEnabled) null else "Bookings unavailable")
+            if (t.bookingEnabled) null else "Bookings unavailable", s.availabilityFor(t))
     }
 }
 
@@ -61,7 +61,8 @@ fun FruitPickingPage(s: AppState) {
     Grid(s.fruitPicking, 3) { f ->
         val favId = f.id + 100L
         PhotoCard(f.imageUrl, f.title, f.location.substringBefore(","), f.rating, f.reviewsCount, f.pricePerPerson, favId in s.favoriteIds,
-            { s.toggleFavorite(favId, f.title) }, { s.selectedFruit = f; s.isFruitModalOpen = true })
+            { s.toggleFavorite(favId, f.title) }, { s.selectedFruit = f; s.isFruitModalOpen = true },
+            availability = s.availabilityFor(f))
     }
 }
 

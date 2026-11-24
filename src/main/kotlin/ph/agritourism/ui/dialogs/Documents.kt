@@ -84,7 +84,7 @@ internal fun FarmerStoryModal(s: AppState, f: FarmerProfile) {
         Box(Modifier.fillMaxWidth().height(240.dp)) {
             AsyncImage(f.farmBannerUrl, Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xE60B2512)))))
-            TextAction("Close", Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep) { close() }
+            CloseAction(Modifier.align(Alignment.TopEnd).padding(10.dp), color = Palette.Deep, showLabel = false) { close() }
             Row(Modifier.align(Alignment.BottomStart).padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Avatar(f.photoUrl, 90.dp); Spacer(Modifier.width(14.dp))
                 Column {
@@ -131,7 +131,7 @@ internal fun FarmerStoryModal(s: AppState, f: FarmerProfile) {
                 PrimaryButton("Book Tour at ${f.farmName}", Modifier.weight(1f), Icons.Outlined.Explore) {
                     s.selectedTour = s.tours.firstOrNull { it.id == f.tourId } ?: s.tours.first(); s.selectedFarmerForModal = null; s.isTourModalOpen = true
                 }
-                TextAction("Close") { close() }
+                CloseAction(onClick = { close() })
             }
         }
     }
@@ -170,7 +170,7 @@ internal fun ReceiptModal(s: AppState, r: Receipt) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton("Print Official Receipt (PDF / Paper)", Modifier.weight(1f), Icons.Outlined.Print) { Printing.openHtml("${r.receiptNumber}.html", Printing.receiptHtml(r)) }
-                TextAction("Close") { close() }
+                CloseAction(onClick = { close() })
             }
         }
     }
@@ -226,7 +226,7 @@ internal fun TicketModal(s: AppState, b: Booking) {
                 PrimaryButton("Print Ticket") {
                     Printing.openHtml("AgriTourism-${b.bookingCode}.html", Printing.ticketHtml(b, autoPrint = true))
                 }
-                TextAction("Close") { close() }
+                CloseAction(onClick = { close() })
             }
         }
     }
